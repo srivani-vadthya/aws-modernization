@@ -523,96 +523,46 @@ def run_differential_golden_parity(engagement_id: str, sample_size: int = 1000) 
 
 
 def synthesize_target_codebase(scope: dict, target_tech: dict) -> dict[str, str]:
-    """Phase 5 Skill: Polyglot Architecture Synthesizer.
-    Generates Clean / Hexagonal Architecture codebases in either Java 21 / Spring Boot 3
-    or C# / .NET 9 with EF Core, MediatR, and OpenAPI contracts.
+    """Generate target-app source for the explicitly approved target contract.
+
+    This function respects the actual language/framework/runtime and does not silently
+    fall back to Java or a static Policy template when a user-selected stack is invalid.
     """
-    lang = (target_tech.get("language") or "java").lower()
+    target = dict(target_tech or {})
+    if not target or not (target.get("language") or target.get("framework") or target.get("runtime") or target.get("stack")):
+        raise ValueError("A validated user-approved target contract is required before generation can start.")
+    lang = (target.get("language") or target.get("stack") or "").lower()
+    framework = (target.get("framework") or "").lower()
+    runtime = (target.get("runtime") or "").lower()
+    version = (target.get("frameworkVersion") or target.get("languageVersion") or "")
+    architecture = (target.get("architecture") or target.get("architectureStyle") or "clean").lower()
     cap_name = scope.get("name", "Motor Policy")
-    cap_id = scope.get("capabilityId", "motor").lower()
-    
-    files = {}
-    if "csharp" in lang or "net" in lang:
-        # C# 13 / .NET 9 Clean Architecture
-        files["src/Domain/Entities/Policy.cs"] = f"""namespace CleanModernize.Domain.Entities;
 
-public class Policy
-{{
-    public Guid Id {{ get; set; }} = Guid.NewGuid();
-    public string PolicyNumber {{ get; set; }} = string.Empty;
-    public decimal PremiumAmount {{ get; set; }}
-    public DateTime EffectiveDate {{ get; set; }}
-    public string Status {{ get; set; }} = "DRAFT";
-}}
-"""
-        files["src/Application/Commands/CreatePolicyCommand.cs"] = f"""using MediatR;
-using CleanModernize.Domain.Entities;
+    if "csharp" in lang or "dotnet" in lang or ".net" in lang or "aspnet" in framework:
+        net_version = "10.0" if "10" in version or "net10" in framework or "dotnet 10" in framework or "10" in (target.get("runtimeVersion") or "") else "9.0"
+        files = {
+            "Policy.csproj": f"<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <TargetFramework>net{net_version.split('.')[0]}.0</TargetFramework>\n    <Nullable>enable</Nullable>\n    <ImplicitUsings>enable</ImplicitUsings>\n  </PropertyGroup>\n</Project>\n",
+            "src/Domain/Entities/Policy.cs": f"namespace CleanModernize.Domain.Entities;\n\npublic class Policy\n{{\n    public Guid Id {{ get; set; }} = Guid.NewGuid();\n    public string PolicyNumber {{ get; set; }} = string.Empty;\n    public decimal PremiumAmount {{ get; set; }}\n    public DateTime EffectiveDate {{ get; set; }}\n    public string Status {{ get; set; }} = \"DRAFT\";\n}}\n",
+            "src/Application/Commands/CreatePolicyCommand.cs": "using MediatR;\nusing CleanModernize.Domain.Entities;\n\nnamespace CleanModernize.Application.Commands;\n\npublic record CreatePolicyCommand(string PolicyNumber, decimal PremiumAmount) : IRequest<Policy>;\n",
+            "src/Infrastructure/Persistence/ModernDbContext.cs": "using Microsoft.EntityFrameworkCore;\nusing CleanModernize.Domain.Entities;\n\nnamespace CleanModernize.Infrastructure.Persistence;\n\npublic class ModernDbContext : DbContext\n{\n    public ModernDbContext(DbContextOptions<ModernDbContext> options) : base(options) { }\n    public DbSet<Policy> Policies => Set<Policy>();\n}\n",
+            "src/Presentation/Program.cs": f"var builder = WebApplication.CreateBuilder(args);\nbuilder.Services.AddEndpointsApiExplorer();\nbuilder.Services.AddSwaggerGen();\n\nvar app = builder.Build();\napp.UseSwagger();\napp.UseSwaggerUI();\n\napp.MapGet(\"/api/policies/{{id}}\", (Guid id) => Results.Ok(new {{ Id = id, Capability = \"{cap_name}\" }}));\n\napp.Run();\n",
+            "src/Presentation/Controllers/PolicyController.cs": f"using Microsoft.AspNetCore.Mvc;\n\nnamespace CleanModernize.Presentation.Controllers;\n\n[ApiController]\n[Route(\"api/\")]\npublic class PolicyController : ControllerBase\n{{\n    [HttpGet(\"policies/{{{{id}}}}\")]\n    public ActionResult<object> GetPolicy(Guid id) => Ok(new {{ Id = id, Capability = \"{cap_name}\", Architecture = \"{architecture}\" }});\n}}\n",
+        }
+        return files
 
-namespace CleanModernize.Application.Commands;
+    if "python" in lang or "fastapi" in framework or "django" in framework:
+        return {
+            "app/main.py": "from fastapi import FastAPI\n\napp = FastAPI(title='Modernized Policy Service')\n\n@app.get('/api/policies/{policy_id}')\ndef get_policy(policy_id: str):\n    return {'id': policy_id, 'capability': 'modernized-policy-service'}\n",
+            "requirements.txt": "fastapi==0.115.12\nuvicorn==0.34.2\n",
+        }
 
-public record CreatePolicyCommand(string PolicyNumber, decimal PremiumAmount) : IRequest<Policy>;
-"""
-        files["src/Infrastructure/Persistence/ModernDbContext.cs"] = f"""using Microsoft.EntityFrameworkCore;
-using CleanModernize.Domain.Entities;
+    if "java" in lang or "spring" in framework:
+        return {
+            "src/main/java/com/modernize/domain/model/Policy.java": "package com.modernize.domain.model;\n\nimport java.math.BigDecimal;\nimport java.time.LocalDate;\nimport java.util.UUID;\n\npublic class Policy {\n    private UUID id;\n    private String policyNumber;\n    private BigDecimal premiumAmount;\n    private LocalDate effectiveDate;\n    private String status;\n}\n",
+            "src/main/java/com/modernize/presentation/PolicyController.java": "package com.modernize.presentation;\n\nimport org.springframework.web.bind.annotation.*;\nimport org.springframework.http.ResponseEntity;\nimport java.util.Map;\n\n@RestController\n@RequestMapping('/api/v1')\npublic class PolicyController {\n    @GetMapping('/policies/{id}')\n    public ResponseEntity<?> getPolicy(@PathVariable String id) {\n        return ResponseEntity.ok(Map.of('id', id, 'capability', 'modernized-policy-service'));\n    }\n}\n",
+        }
 
-namespace CleanModernize.Infrastructure.Persistence;
-
-public class ModernDbContext : DbContext
-{{
-    public ModernDbContext(DbContextOptions<ModernDbContext> options) : base(options) {{}}
-    public DbSet<Policy> Policies => Set<Policy>();
-}}
-"""
-        files["src/Presentation/Program.cs"] = f"""var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-var app = builder.Build();
-app.UseSwagger();
-app.UseSwaggerUI();
-
-app.MapGet("/api/policies/{{id}}", (Guid id) => Results.Ok(new {{ Id = id, Capability = "{cap_name}" }}));
-
-app.Run();
-"""
-    else:
-        # Java 21 / Spring Boot 3 Hexagonal Architecture
-        files["src/main/java/com/modernize/domain/model/Policy.java"] = f"""package com.modernize.domain.model;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.UUID;
-import lombok.*;
-
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class Policy {{
-    private UUID id;
-    private String policyNumber;
-    private BigDecimal premiumAmount;
-    private LocalDate effectiveDate;
-    private String status;
-}}
-"""
-        files["src/main/java/com/modernize/presentation/PolicyController.java"] = f"""package com.modernize.presentation;
-
-import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
-import java.util.Map;
-
-@RestController
-@RequestMapping("/api/v1/policies")
-public class PolicyController {{
-    @GetMapping("/{{id}}")
-    public ResponseEntity<?> getPolicy(@PathVariable String id) {{
-        return ResponseEntity.ok(Map.of("id", id, "capability", "{cap_name}"));
-    }}
-}}
-"""
-    return files
+    raise ValueError(f"Unsupported target contract: language={lang}, framework={framework}, runtime={runtime}")
 
 
 def modernize_batch_job(jcl_text: str) -> dict:
