@@ -31,6 +31,9 @@ KIND_BY_SUFFIX = {
     ".cs": ("csharp", "source"),
     ".vb": ("vbnet", "source"),
     ".csproj": ("csharp", "project"),
+    ".ts": ("typescript", "source"),
+    ".tsx": ("typescript", "source"),
+    ".cshtml": ("razor", "screen"),
     ".sln": ("csharp", "solution"),
     ".md": ("docs", "doc"),
     ".txt": ("docs", "doc"),
@@ -41,8 +44,20 @@ KIND_BY_SUFFIX = {
 
 SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "dist", "target", "bin", "obj", ".vs", "packages",
-    "Scripts", "scripts", "Content", "content", "fonts", "Images", "images", "assets", "bower_components"
+    "Content", "content", "fonts", "Images", "images", "assets", "bower_components"
 }
+# Scripts/ holds vendor JavaScript *and* the application's own TypeScript: keep only the latter.
+SCRIPT_DIRS = {"Scripts", "scripts"}
+
+
+def _skip(path: Path, root: Path) -> bool:
+    parts = path.relative_to(root).parts
+    if any(part in SKIP_DIRS for part in parts):
+        return True
+    if any(part in SCRIPT_DIRS for part in parts[:-1]):
+        name = path.name.lower()
+        return not ((name.endswith(".ts") or name.endswith(".tsx")) and not name.endswith(".d.ts"))
+    return False
 
 
 def classify_tree(root: Path) -> dict:
@@ -57,7 +72,7 @@ def classify_tree(root: Path) -> dict:
         return {"assets": [], "counts": {}, "languages": {}, "warnings": ["Source tree is empty"]}
 
     for path in root.rglob("*"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if _skip(path, root):
             continue
         if not path.is_file():
             continue

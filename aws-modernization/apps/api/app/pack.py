@@ -47,6 +47,17 @@ def build_pack(eng: dict) -> bytes:
 
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("engagement.json", json.dumps({k: v for k, v in eng.items() if k != "seed"}, indent=2))
+
+        # Latest migration-run evidence and human-action registry
+        runs_root = root / "artifacts" / "migration-runs"
+        if runs_root.exists():
+            for run_dir in sorted(runs_root.iterdir()):
+                if not run_dir.is_dir():
+                    continue
+                for name in ("human-actions.json", "HUMAN_ACTION_REQUIRED.md"):
+                    file_path = run_dir / name
+                    if file_path.exists():
+                        zf.writestr(f"artifacts/migration-runs/{run_dir.name}/{name}", file_path.read_text(encoding="utf-8"))
         
         # Golden SRS and Architecture Specifications
         zf.writestr("specifications/SRS.md", bedrock_skills.generate_srs_markdown(eng))

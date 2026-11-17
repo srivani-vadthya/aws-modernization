@@ -1,0 +1,33 @@
+{
+  "description": "Hand-checked reference for tests/fixtures/modern_tickets (SDK-style, no .sln, DbContext injection, ASP.NET Core attribute routing, MediatR). Every listed source is closed.",
+  "closedSources": [
+    "Tickets.Api.Services.TicketService", "Tickets.Api.Services.GeoClient", "Tickets.Api.Services.EventBridgeClient",
+    "Tickets.Api.Controllers.TicketsController", "Tickets.Api.Controllers.AgentsController",
+    "Tickets.Api.Data.AppDbContext", "Tickets.Api.Domain.Ticket", "Tickets.Api.Domain.TicketNote",
+    "Tickets.Api.Domain.Agent", "ts:web/src/api.ts"
+  ],
+  "edges": [
+    {"kind": "CALLS", "source": "Tickets.Api.Controllers.TicketsController", "target": "Tickets.Api.Services.TicketService"},
+    {"kind": "CALLS", "source": "Tickets.Api.Controllers.TicketsController", "target": "Tickets.Api.Services.GeoClient"},
+    {"kind": "CALLS", "source": "Tickets.Api.Controllers.AgentsController", "target": "Tickets.Api.Data.AppDbContext"},
+    {"kind": "CALLS", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Data.AppDbContext"},
+    {"kind": "CALLS", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Services.EventBridgeClient"},
+    {"kind": "CALLS", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Domain.Ticket"},
+    {"kind": "CALLS", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Domain.TicketNote"},
+    {"kind": "CALLS", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Domain.TicketOpened"},
+
+    {"kind": "ACCESSES_DATA", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Domain.Ticket"},
+    {"kind": "ACCESSES_DATA", "source": "Tickets.Api.Services.TicketService", "target": "Tickets.Api.Domain.TicketNote"},
+    {"kind": "ACCESSES_DATA", "source": "Tickets.Api.Controllers.AgentsController", "target": "Tickets.Api.Domain.Agent"},
+
+    {"kind": "REFERENCES", "source": "Tickets.Api.Domain.Ticket", "target": "Tickets.Api.Domain.Agent"},
+    {"kind": "REFERENCES", "source": "Tickets.Api.Domain.Ticket", "target": "Tickets.Api.Domain.TicketNote"},
+    {"kind": "REFERENCES", "source": "Tickets.Api.Domain.TicketNote", "target": "Tickets.Api.Domain.Ticket"},
+
+    {"kind": "HTTP_CALLS", "source": "ts:web/src/api.ts", "target": "Tickets.Api.Controllers.TicketsController"},
+
+    {"kind": "INVOKES_EXTERNAL", "source": "Tickets.Api.Services.GeoClient", "target": "external:System.Net.Http.HttpClient"},
+
+    {"kind": "EMITS_EVENT", "source": "Tickets.Api.Services.TicketService", "target": "event:MediatR.IMediator.Publish"}
+  ]
+}
