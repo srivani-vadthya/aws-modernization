@@ -509,3 +509,18 @@ def test_estimates_use_uplift_and_llm_cannot_go_below_it(eng, monkeypatch):
     upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
            "acceptanceCriteria": ["Scenario: x"], "storyPoints": 1}
     assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == 8
+
+
+def test_modules_are_ordered_most_used_first():
+    def mod(i, name, deps=(), shared=False):
+        return {"id": i, "name": name, "shared": shared, "dependsOn": list(deps), "sharedKernels": [],
+                "riskScore": None, "metrics": {"loc": 100, "useCases": 1}}
+    mods = [mod("a", "App", deps=["Core", "Mid", "Platform"]),
+            mod("m", "Mid", deps=["Core", "Platform"]),
+            mod("c", "Core", deps=["Platform"]),
+            mod("p", "Platform", shared=True)]
+    out = scope_modules._rank_for_modernization(mods, {m["name"]: m["id"] for m in mods})
+    assert [m["name"] for m in out] == ["Platform", "Core", "Mid", "App"]
+    assert [m["modernization"]["rank"] for m in out] == [1, 2, 3, 4]
+    assert out[0]["modernization"]["reason"].startswith("used by 3 other modules")
+    assert out[-1]["modernization"]["reason"].startswith("not used by any other module")

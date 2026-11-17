@@ -182,8 +182,30 @@ def _structural_modules(eng: dict) -> list[dict]:
             } for f in mod_flows],
             "files": files,
         })
-    # Business modules first (most use cases / data), shared platform code last.
-    modules.sort(key=lambda m: (m["shared"], -m["metrics"]["useCases"], -m["metrics"]["files"], m["name"]))
+    return _rank_for_modernization(modules, {m["name"]: m["id"] for m in modules})
+
+
+def _rank_for_modernization(modules: list[dict], id_by_name: dict[str, str]) -> list[dict]:
+    """Order modules by which should be modernized first: the most widely used (shared) modules come first.
+
+    Modules that many other modules depend on are foundations; modernizing them first lets their consumers be
+    migrated against the new version. Sort key: incoming dependencies (descending), then fewer outgoing
+    dependencies (more self-contained first), then use-case count, then name. Dependencies come from AKG edges.
+    Adds `modernization = {rank, score, reason}` to each module (`score` = incoming dependency count).
+    """
+    inbound: dict[str, int] = {m["id"]: 0 for m in modules}
+    for m in modules:
+        for dep in m["dependsOn"]:
+            if id_by_name.get(dep) in inbound:
+                inbound[id_by_name[dep]] += 1
+    for m in modules:
+        inn, out = inbound[m["id"]], len(m["dependsOn"])
+        reason = (f"used by {inn} other module{'s' if inn != 1 else ''}" if inn else "not used by any other module")
+        reason += f"; depends on {out} other module{'s' if out != 1 else ''}" if out else "; depends on no other modules"
+        m["modernization"] = {"rank": 0, "score": inn, "reason": reason}
+    modules.sort(key=lambda m: (-inbound[m["id"]], len(m["dependsOn"]), -m["metrics"]["useCases"], m["name"]))
+    for i, m in enumerate(modules, 1):
+        m["modernization"]["rank"] = i
     return modules
 
 
