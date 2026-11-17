@@ -151,8 +151,12 @@ def test_sir_scaffold_is_ast_anchored(eng):
     assert write["legacyLines"] == "App/Controllers/OrderController.cs#L12"
     assert "Uow.Orders.Add(model)" in write["snippet"]
     assert write["trustBoundary"].startswith("Deterministic")
-    guard = next(r for r in c["rules"] if r["astNode"].endswith(":BRANCH"))
+    guards = [r for r in c["rules"] if r["astNode"].endswith(":BRANCH")]
+    assert len(guards) == 1, "a method's branches are the conditions of ONE validation rule, not a rule each"
+    guard = guards[0]
     assert "model.Total > 500" in guard["statement"]
+    assert any("model.Total > 500" in cond for cond in guard["conditions"])
+    assert len(guard["conditionLines"]) == len(guard["conditions"])
     plumbing = next(r for r in c["rules"] if "SaveChanges" in r["statement"])
     assert plumbing["kind"] == "legacy_plumbing_pruned"
     assert c["stateMachine"].startswith("RECEIVE_REQUEST -> ") and c["stateMachine"].endswith("COMPLETE")
@@ -207,7 +211,11 @@ def test_backlog_scaffold_covers_every_rule_and_validates(eng):
     stories = [s for _, _, s in user_stories.bm.iter_stories(backlog)]
     functional = [s for s in stories if s["type"] == "functional"]
     business = [r for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"]
-    assert len(functional) == len(business)
+    covered = [rid for s in functional for rid in s["trace"]["ruleIds"]]
+    assert sorted(covered) == sorted(r["ruleId"] for r in business), "every rule is covered exactly once"
+    assert len(functional) <= len(business), "stories are per behaviour (legacy method), not per branch"
+    for s in functional:   # each rule is an acceptance scenario, plus one parity scenario
+        assert len(s["acceptanceCriteria"]) == len(s["trace"]["ruleIds"]) + 1 <= 8
     assert {s["type"] for s in stories} == {"functional", "flow", "enabler"}
     assert not [i for i in us["validation"] if i["level"] == "ERROR"]
     assert all(s["narrativeSource"] == "template" for s in stories)
@@ -247,7 +255,9 @@ def test_llm_refinement_keeps_trace_and_rejects_dropped_literals(eng, monkeypatc
     assert backlog["epics"][0]["businessOutcome"] == "Faster order intake."
     stories = {s["id"]: s for _, _, s in user_stories.bm.iter_stories(backlog)}
     sir = eng["seed"]["semantic_ir"][0]
-    assert stories["US-SIR-001-02"]["trace"]["ruleId"] == sir["rules"][1]["ruleId"]
+    traced = sorted(r for s in stories.values() if s["type"] == "functional" for r in s["trace"]["ruleIds"])
+    assert traced == sorted(r["ruleId"] for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"), \
+        "LLM output cannot change the trace"
     assert max(s["storyPoints"] for s in stories.values()) <= 8
     assert all("bad label!" not in s["labels"] for s in stories.values())
     refined = [s for s in stories.values() if s["narrativeSource"] == "refined"]
@@ -267,6 +277,30 @@ def test_literal_guard_rejects_rewrite_that_drops_a_number():
     upd["acceptanceCriteria"] = ["Scenario: large orders\n  Then orders over 500 are rejected"]
     s2 = dict(story)
     assert user_stories._apply_story(s2, upd, rule) is None and s2["narrativeSource"] == "refined"
+    # a behaviour story groups several rules: the guard checks every core rule, not just the first one
+    plain = {"ruleId": "R1", "statement": "Branches on x", "snippet": "", "trustBoundary": "Application Logic"}
+    upd["acceptanceCriteria"] = ["Scenario: large orders\n  Then they are rejected"]
+    assert "500" in user_stories._apply_story(dict(story), upd, [plain, rule])
+
+
+def test_rules_of_one_legacy_method_become_one_story():
+    sts = user_stories.sts
+    rules = [{"ruleId": f"S.R{i}", "statement": f"Branches on c{i}", "snippet": f"if (c{i})",
+              "classification": "Validation / Control Flow", "trustBoundary": "Application Logic",
+              "legacyLines": f"A.cs#L{i}", "astNode": f"AST:Ctl.Save:L{i}:BRANCH"} for i in range(1, 9)]
+    rules.append({"ruleId": "S.R9", "statement": "Lists items", "snippet": "db.Items.ToList()",
+                  "classification": "Data Retrieval", "trustBoundary": "Application Logic",
+                  "legacyLines": "A.cs#L90", "astNode": "AST:Ctl.Index:L90:CALL"})
+    groups = sts.group_rules(rules)
+    # branches are conditions of one behaviour, never stories (or split triggers) of their own
+    assert [(n, len(c)) for n, c in groups] == [("Ctl.Save", 8), ("Ctl.Index", 1)]
+    ops = [{"ruleId": f"S.W{i}", "statement": f"Persists changes to T{i}", "classification": "State Mutation",
+            "trustBoundary": "Deterministic Core (x)", "astNode": f"AST:Ctl.Save:L{20 + i}:WRITES"} for i in range(8)]
+    groups = sts.group_rules(rules + ops)
+    assert [(n, len(c)) for n, c in groups] == [("Ctl.Save (part 1 of 2)", 8 + 6), ("Ctl.Save (part 2 of 2)", 2),
+                                                ("Ctl.Index", 1)]
+    story = sts._behaviour_story({"id": "S"}, groups[0][0], groups[0][1], 1, "clerk")
+    assert len(story["acceptanceCriteria"]) == 1 + 6 + 1, "one validation scenario + one per operation + parity"
 
 
 # ------------------------------------------------------------------ tracker push
@@ -490,22 +524,76 @@ def test_assessment_finds_evidence_and_ignores_modern_authorize():
     assert any("DBA" in d for d in a["definitionOfDone"])
 
 
-def test_estimates_use_uplift_and_llm_cannot_go_below_it(eng, monkeypatch):
+def test_estimates_score_three_factors_and_llm_cannot_go_below_it(eng, monkeypatch):
     eng = _with_sir(eng)
     sir = eng["seed"]["semantic_ir"][0]
     sir["legacyAssessment"] = {"paradigm": "MVC", "uplift": 3, "regressionScope": ["Orders: Edit"],
                                "definitionOfDone": ["dod"], "factors": [
-                                   {"category": "data", "finding": "Raw SQL", "evidence": "c.cs#L1", "points": 3,
-                                    "question": "Which stored procedures does this use?"}]}
+                                   {"category": "data", "finding": "Raw SQL", "evidence": "c.cs#L1", "points": 2,
+                                    "question": "Which stored procedures does this use?"},
+                                   {"category": "unknowns", "finding": "TODO in code", "evidence": "c.cs#L9",
+                                    "points": 1}]}
     backlog = user_stories.sts.build_backlog([sir])
     stories = {s["id"]: s for _, _, s in user_stories.bm.iter_stories(backlog)}
     flow = next(s for s in stories.values() if s["type"] == "flow")
-    assert flow["estimation"] == {**flow["estimation"], "base": 5, "uplift": 3, "points": 8}
+    est = flow["estimation"]
+    for key in ("complexity", "work", "risk"):   # every factor is a 1-5 level backed by evidence
+        assert 1 <= est[key]["level"] <= 5 and est[key]["evidence"]
+    assert "Raw SQL" in est["risk"]["evidence"] and est["risk"]["level"] >= 3
+    assert est["factorSum"] == sum(est[k]["level"] for k in ("complexity", "work", "risk"))
+    assert est["humanPoints"] == user_stories.sts.est_mod.to_points(est["factorSum"])
+    assert est["points"] == est["aiPoints"] == flow["storyPoints"] <= est["humanPoints"]
+    assert est["humanOnly"] == 2, "open question on the flow keeps human-only effort"
     assert "legacy-risk" in flow["labels"] and flow["definitionOfDone"] == ["dod"]
     assert any("Adjacent workflows" in a for a in flow["acceptanceCriteria"])
-    assert [q["question"] for q in backlog["openQuestions"]] == ["Which stored procedures does this use?"]
+    assert [q["question"] for q in backlog["openQuestions"]][0] == "Which stored procedures does this use?"
+    ids = [q["id"] for q in backlog["openQuestions"]]
+    assert {"Q-EST-01", "Q-EST-02", "Q-EST-03"} <= set(ids), "AI level, reference story and team context to confirm"
+    ref = backlog["estimationModel"]["reference"]
+    assert "reference-story" in stories[ref["storyId"]]["labels"] and stories[ref["storyId"]]["type"] == "functional"
     assert backlog["epics"][0]["approach"].startswith("Parity-first")
     assert not [i for i in user_stories.bm.validate(backlog) if i[0] == "ERROR"]
     upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
            "acceptanceCriteria": ["Scenario: x"], "storyPoints": 1}
-    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == 8
+    ai = flow["storyPoints"]
+    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == ai
+    upd["storyPoints"] = 21
+    assert user_stories._apply_story(flow, upd, None) is None
+    assert flow["storyPoints"] == est["humanPoints"], "never above manual"
+
+
+def test_points_follow_evidence_not_rule_count():
+    est = user_stories.sts.est_mod
+    simple = [{"ruleId": "R1", "statement": "Reads Invoice", "classification": "Data Retrieval",
+               "trustBoundary": "Application Logic", "astNode": "AST:InvoiceApi.Get:L5:READS"}]
+    heavy = [{"ruleId": "G", "statement": "Validates the request before processing: a; b; c; d; e; f",
+              "conditions": list("abcdef"), "classification": "Validation / Control Flow",
+              "trustBoundary": "Application Logic", "astNode": "AST:Inv.Save:L1:BRANCH"}] + [
+        {"ruleId": f"W{i}", "statement": f"Persists changes to T{i}", "classification": "State Mutation",
+         "trustBoundary": "Deterministic Core (x)", "astNode": f"AST:Inv.Save:L{i}:WRITES"} for i in range(2, 8)]
+    risky = {"factors": [{"category": "unknowns", "finding": "untraced calls", "points": 1},
+                         {"category": "security", "finding": "MD5 hashing", "points": 1}]}
+    a = est.score_behaviour(simple, None, None)
+    b = est.score_behaviour(heavy, None, None)
+    c = est.score_behaviour(simple, risky, {"legacyStackFamiliar": False, "targetStackFamiliar": False})
+    assert a["humanPoints"] <= 2, "a single read is at the reference-story size"
+    assert b["complexity"]["level"] > a["complexity"]["level"] and b["work"]["level"] > a["work"]["level"]
+    assert b["humanPoints"] >= 8
+    assert c["risk"]["level"] > a["risk"]["level"] and c["humanPoints"] > a["humanPoints"], "unknowns + team raise risk"
+    familiar = est.score_behaviour(simple, risky, {"builtSimilarBefore": True})
+    assert familiar["risk"]["level"] < c["risk"]["level"]
+
+
+def test_ai_capability_levels_scale_points(eng):
+    sir = _with_sir(eng)["seed"]["semantic_ir"][0]
+    totals = {}
+    for level in ("L0", "L1", "L2", "L3"):
+        b = user_stories.sts.build_backlog([sir], ai_capability=level)
+        c = user_stories.bm.counts(b)
+        totals[level] = c["storyPoints"]
+        assert c["aiEfficiency"] <= user_stories.sts.MAX_EPIC_EFFICIENCY
+        assert b["estimationModel"] == {**b["estimationModel"], "capability": level, "assumed": False}
+        assert not any(q["id"] == "Q-EST-01" for q in b["openQuestions"])
+        assert not [i for i in user_stories.bm.validate(b) if i[0] == "ERROR"]
+    assert totals["L0"] == c["humanPoints"], "no AI tools: AI-assisted equals the manual baseline"
+    assert totals["L0"] >= totals["L1"] >= totals["L2"] >= totals["L3"]

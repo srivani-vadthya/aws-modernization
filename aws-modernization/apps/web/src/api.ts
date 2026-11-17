@@ -117,6 +117,28 @@ export type ScopeModules = {
   digest: string;
 };
 
+export type EstimationFactor = { level: 1 | 2 | 3 | 4 | 5; label: string; evidence: string[] };
+
+/** Complexity + Amount of work + Risk & uncertainty (1-5 each), relative to a reference story, on Fibonacci. */
+export type StoryEstimation = {
+  complexity?: EstimationFactor;
+  work?: EstimationFactor;
+  risk?: EstimationFactor;
+  factorSum?: number;
+  humanPoints?: number;
+  aiPoints?: number;
+  points: number;
+  aiEfficiency?: number;
+  aiFactors?: { complexity: number; work: number; risk: number };
+  humanOnly?: number;
+  capability?: string;
+  confidence?: "high" | "medium" | "low";
+  reference?: string;
+  inputsNeeded?: string[];
+  legacyFactors?: { category: string; finding: string; evidence: string; points: number }[];
+  notes?: string[];
+};
+
 export type Story = {
   id: string;
   type: "functional" | "flow" | "enabler";
@@ -129,12 +151,7 @@ export type Story = {
   labels: string[];
   narrativeSource: "template" | "refined";
   definitionOfDone?: string[];
-  estimation?: {
-    base: number;
-    uplift: number;
-    points: number;
-    factors: { category: string; finding: string; evidence: string; points: number }[];
-  };
+  estimation?: StoryEstimation;
   trustBoundary?: string;
   classification?: string;
   trace: { sirId: string; ruleId: string | null; ruleIds?: (string | null)[]; legacyLines: string; snippet: string; astNode: string };
@@ -173,6 +190,13 @@ export type Epic = {
 export type Backlog = {
   schemaVersion: string;
   generatedAt: string;
+  estimationModel?: {
+    capability: "L0" | "L1" | "L2" | "L3";
+    multiplier: number;
+    assumed: boolean;
+    method?: string;
+    reference?: { title: string; description: string; complexity: number; work: number; risk: number; points: number; storyId?: string };
+  };
   epics: Epic[];
   openQuestions: { id: string; storyId: string | null; question: string }[];
 };
@@ -182,7 +206,10 @@ export type UserStoriesState = {
   scope: string | null;
   sirIds: string[];
   backlog: Backlog;
-  counts: { epics: number; features: number; stories: number; storyPoints: number; refined: number; template: number; openQuestions: number };
+  counts: {
+    epics: number; features: number; stories: number; storyPoints: number; refined: number; template: number; openQuestions: number;
+    humanPoints?: number; aiEfficiency?: number;
+  };
   validation: { level: "ERROR" | "WARN"; message: string }[];
   refinement: { status: "llm" | "partial" | "unavailable" | "skipped"; model: string | null; refined: number; total: number; rejected: { storyId: string; reason: string }[] };
   epicDetermination: { status: "llm" | "deterministic"; model: string | null };

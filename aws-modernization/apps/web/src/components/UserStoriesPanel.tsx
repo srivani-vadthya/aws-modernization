@@ -87,8 +87,8 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Epic → Feature → User Story backlog</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                One feature per SIR contract, one story per business rule (plus a flow story and a plumbing enabler), every story traced to the
-                legacy lines it came from.
+                One feature per SIR contract, one story per piece of business behaviour (the rules of one legacy method, each an acceptance
+                scenario), plus a flow story and a plumbing enabler. Every rule is traced to the legacy lines it came from.
               </p>
             </div>
           </div>
@@ -114,20 +114,43 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
         </div>
         {error && <p role="alert" className="mt-2 text-xs text-red-700">Regeneration failed: {error}</p>}
 
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {[
-            ["Epics", us.counts.epics],
-            ["Features", us.counts.features],
-            ["Stories", us.counts.stories],
-            ["Story points", us.counts.storyPoints],
-            ["Open questions", us.counts.openQuestions],
-          ].map(([label, value]) => (
-            <div key={label as string} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {(
+            [
+              ["Epics", us.counts.epics],
+              ["Features", us.counts.features],
+              ["Stories", us.counts.stories],
+              ...(us.counts.humanPoints != null
+                ? [
+                    ["Story points (AI-assisted)", us.counts.storyPoints, "Effort for the team working with AI from the SIR; this is what to plan with"],
+                    ["AI efficiency", `${Math.round((us.counts.aiEfficiency ?? 0) * 100)}%`, "Share of the manual effort that AI removes"],
+                  ]
+                : [["Story points", us.counts.storyPoints]]),
+              ["Open questions", us.counts.openQuestions],
+            ] as [string, number | string, string?][]
+          ).map(([label, value, hint]) => (
+            <div key={label} title={hint} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
               <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</dt>
               <dd className="text-lg font-bold text-slate-900">{value}</dd>
             </div>
           ))}
         </dl>
+        {us.backlog.estimationModel && (
+          <p className="mt-2 text-[11px] text-slate-500">
+            Team AI capability: <span className="font-semibold text-slate-700">{us.backlog.estimationModel.capability}</span>
+            {us.backlog.estimationModel.assumed && " (assumed, confirm in Q-EST-01)"}. L0 no AI tools · L1 autocomplete/chat · L2 AI agent with
+            SIR context · L3 plus an automated parity harness.
+            {us.backlog.estimationModel.reference && (
+              <>
+                {" "}Sized on Complexity + Amount of work + Risk & uncertainty (1–5 each) relative to the reference story{" "}
+                <span className="font-semibold text-slate-700">
+                  {us.backlog.estimationModel.reference.storyId ?? us.backlog.estimationModel.reference.title}
+                </span>{" "}
+                = {us.backlog.estimationModel.reference.points} pts (confirm in Q-EST-02).
+              </>
+            )}
+          </p>
+        )}
         <p className="mt-3 text-[11px] text-slate-500">
           {ref.status === "skipped"
             ? "Template wording only: LLM refinement was switched off."
@@ -217,6 +240,7 @@ function EpicBlock({ epic }: { epic: Epic }) {
 
 function FeatureBlock({ feature, defaultOpen }: { feature: Feature; defaultOpen: boolean }) {
   const points = feature.stories.reduce((n, s) => n + s.storyPoints, 0);
+  const manual = feature.stories.reduce((n, s) => n + (s.estimation?.humanPoints ?? s.storyPoints), 0);
   return (
     <details open={defaultOpen} className="rounded-lg border border-slate-200 bg-slate-50/60">
       <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-3">
@@ -224,7 +248,7 @@ function FeatureBlock({ feature, defaultOpen }: { feature: Feature; defaultOpen:
         <span className="font-mono text-[11px] text-slate-500">{feature.id}</span>
         <span className="text-sm font-semibold text-slate-900">{feature.title}</span>
         <span className="ml-auto font-mono text-[10px] text-slate-500">
-          {feature.stories.length} stories · {points} pts
+          {feature.stories.length} stories · {points} pts{manual !== points && ` (manual ${manual})`}
         </span>
       </summary>
       <div className="space-y-2 border-t border-slate-200 px-4 py-3">
@@ -235,14 +259,13 @@ function FeatureBlock({ feature, defaultOpen }: { feature: Feature; defaultOpen:
         {feature.legacyAssessment && feature.legacyAssessment.factors.length > 0 && (
           <details className="rounded-lg border border-amber-200 bg-amber-50/60">
             <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-amber-900">
-              Legacy complexity: +{feature.legacyAssessment.uplift} pts · {feature.legacyAssessment.paradigm}
+              Legacy findings (feed the complexity and risk factors) · {feature.legacyAssessment.paradigm}
             </summary>
             <ul className="space-y-1 border-t border-amber-200 px-3 py-2 text-[11px] text-amber-900">
               {feature.legacyAssessment.factors.map((f) => (
                 <li key={f.category + f.finding}>
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase">{f.category}</span>{" "}
                   {f.finding}
-                  {f.points > 0 && <span className="font-mono font-bold"> +{f.points}</span>}
                   {f.evidence && <span className="ml-1 break-all font-mono text-[10px] text-amber-700">{f.evidence}</span>}
                 </li>
               ))}
@@ -279,7 +302,15 @@ function StoryRow({ story }: { story: Story }) {
         <span className="min-w-0 flex-1 truncate text-xs text-slate-900">{story.title}</span>
         <span className={`hidden shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase sm:block ${TYPE_CLS[story.type]}`}>{story.type}</span>
         <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${PRIORITY_CLS[story.priority] ?? ""}`}>{story.priority}</span>
-        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">{story.storyPoints} pts</span>
+        <span
+          className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600"
+          title={story.estimation?.humanPoints != null ? `AI-assisted ${story.storyPoints} pts; manual baseline ${story.estimation.humanPoints} pts` : undefined}
+        >
+          {story.storyPoints} pts
+          {story.estimation?.humanPoints != null && story.estimation.humanPoints !== story.storyPoints && (
+            <span className="text-slate-400"> / {story.estimation.humanPoints}</span>
+          )}
+        </span>
         {story.narrativeSource === "template" && (
           <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700" title="Mechanical wording, not yet refined">template</span>
         )}
@@ -291,12 +322,7 @@ function StoryRow({ story }: { story: Story }) {
             <span className="font-semibold">so that</span> {story.narrative.soThat}.
           </p>
           {story.description && <p className="text-slate-600">{story.description}</p>}
-          {story.estimation && story.estimation.uplift > 0 && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900">
-              <span className="font-bold">Estimate:</span> {story.estimation.base} base + {story.estimation.uplift} legacy complexity ={" "}
-              {story.estimation.points} pts. {story.estimation.factors.map((f) => f.finding).join("; ")}
-            </p>
-          )}
+          {story.estimation?.complexity && <EstimateBlock story={story} />}
           <div>
             <h6 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Acceptance criteria</h6>
             <div className="space-y-1.5">
@@ -326,6 +352,63 @@ function StoryRow({ story }: { story: Story }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const FACTORS: { key: "complexity" | "work" | "risk"; label: string }[] = [
+  { key: "complexity", label: "Complexity" },
+  { key: "work", label: "Amount of work" },
+  { key: "risk", label: "Risk & uncertainty" },
+];
+
+const CONFIDENCE_CLS: Record<string, string> = {
+  high: "bg-emerald-100 text-emerald-800",
+  medium: "bg-amber-100 text-amber-800",
+  low: "bg-red-100 text-red-800",
+};
+
+/** Story points from evidence: three 1-5 factors, relative to the reference story, manual vs AI-assisted. */
+function EstimateBlock({ story }: { story: Story }) {
+  const e = story.estimation!;
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-[11px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-bold text-slate-900">Estimate</span>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
+          C{e.complexity!.level} + W{e.work!.level} + R{e.risk!.level} = {e.factorSum} → {e.humanPoints} pts manual
+        </span>
+        <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-emerald-800">
+          {story.storyPoints} pts AI-assisted ({Math.round((e.aiEfficiency ?? 0) * 100)}% saved, {e.capability})
+        </span>
+        {e.confidence && (
+          <span className={`rounded px-1.5 py-0.5 font-semibold ${CONFIDENCE_CLS[e.confidence] ?? ""}`}>{e.confidence} confidence</span>
+        )}
+      </div>
+      <table className="w-full border-collapse">
+        <tbody>
+          {FACTORS.map(({ key, label }) => {
+            const f = e[key]!;
+            return (
+              <tr key={key} className="border-t border-slate-100 align-top">
+                <td className="w-32 py-1 pr-2 font-semibold text-slate-700">{label}</td>
+                <td className="w-28 py-1 pr-2">
+                  <span className="font-mono">{f.level}/5</span> <span className="text-slate-500">{f.label}</span>
+                  {e.aiFactors && <span className="block text-[10px] text-emerald-700">AI: {e.aiFactors[key]}</span>}
+                </td>
+                <td className="py-1 text-slate-600">{f.evidence.join("; ")}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {e.reference && <p className="text-slate-500">{e.reference}.</p>}
+      {e.inputsNeeded && e.inputsNeeded.length > 0 && (
+        <p className="text-slate-600">
+          <span className="font-semibold">Inputs needed to size it:</span> {e.inputsNeeded.join("; ")}
+        </p>
+      )}
+      {e.notes && e.notes.length > 0 && <p className="text-slate-500">{e.notes.join("; ")}</p>}
     </div>
   );
 }

@@ -25,7 +25,8 @@ from typing import Iterator
 
 SCHEMA_VERSION = "1.0"
 FIBONACCI = (1, 2, 3, 5, 8, 13, 21)
-MAX_POINTS = 8
+MAX_POINTS = 13          # 13 is allowed but should be split; 21 must be split
+SPLIT_ADVISED = 8
 PRIORITIES = ("Must", "Should", "Could", "Won't")
 STORY_TYPES = ("functional", "flow", "enabler")
 NARRATIVE_SOURCES = ("template", "refined")
@@ -46,11 +47,15 @@ def iter_stories(backlog: dict) -> Iterator[tuple[dict, dict, dict]]:
 
 def counts(backlog: dict) -> dict:
     stories = [s for _, _, s in iter_stories(backlog)]
+    ai = sum(s.get("storyPoints") or 0 for s in stories)
+    human = sum((s.get("estimation") or {}).get("humanPoints", s.get("storyPoints") or 0) for s in stories)
     return {
         "epics": len(backlog.get("epics", [])),
         "features": sum(1 for _ in iter_features(backlog)),
         "stories": len(stories),
-        "storyPoints": sum(s.get("storyPoints") or 0 for s in stories),
+        "storyPoints": ai,                 # AI-assisted points: what the team plans with
+        "humanPoints": human,              # manual (no-AI) baseline
+        "aiEfficiency": round(1 - ai / human, 2) if human else 0.0,
         "refined": sum(1 for s in stories if s.get("narrativeSource") == "refined"),
         "template": sum(1 for s in stories if s.get("narrativeSource") != "refined"),
         "openQuestions": len(backlog.get("openQuestions", [])),
@@ -120,6 +125,15 @@ def validate(backlog: dict) -> list[tuple[str, str]]:
                     out.append(("ERROR", f"{sid}: storyPoints {pts!r} is not a Fibonacci size"))
                 elif pts > MAX_POINTS:
                     out.append(("ERROR", f"{sid}: {pts} points is over {MAX_POINTS}; split into sibling stories"))
+                elif pts > SPLIT_ADVISED:
+                    out.append(("WARN", f"{sid}: {pts} points; consider splitting into smaller stories"))
+                est = story.get("estimation") or {}
+                if isinstance(pts, int) and est.get("humanOnly") and pts < est["humanOnly"]:
+                    out.append(("ERROR", f"{sid}: storyPoints {pts} is below the human-only effort "
+                                         f"{est['humanOnly']} (SME/DBA answers, sign-off)"))
+                if isinstance(pts, int) and est.get("humanPoints") and pts > est["humanPoints"]:
+                    out.append(("WARN", f"{sid}: AI-assisted storyPoints {pts} exceed the manual baseline "
+                                        f"{est['humanPoints']}"))
                 if story.get("priority") not in PRIORITIES:
                     out.append(("ERROR", f"{sid}: priority must be one of {PRIORITIES}"))
                 if story.get("narrativeSource") not in NARRATIVE_SOURCES:
@@ -148,7 +162,13 @@ def backlog_markdown(backlog: dict) -> str:
     c = counts(backlog)
     lines = [f"# Backlog: {', '.join(e['title'] for e in backlog.get('epics', [])) or 'empty'}", "",
              f"{c['epics']} epic(s) · {c['features']} feature(s) · {c['stories']} stories · "
-             f"{c['storyPoints']} points · {c['refined']} refined / {c['template']} template", ""]
+             f"{c['storyPoints']} AI-assisted points (manual baseline {c['humanPoints']}, "
+             f"{round(c['aiEfficiency'] * 100)}% AI efficiency) · {c['refined']} refined / {c['template']} template", ""]
+    model = backlog.get("estimationModel")
+    if model:
+        lines += [f"*Estimation: team AI capability {model['capability']}"
+                  f"{' (assumed, see Q-EST-01)' if model.get('assumed') else ''}. Story points are AI-assisted; "
+                  "the manual baseline is shown per story.*", ""]
     for epic in backlog.get("epics", []):
         lines += [f"## Epic {epic['id']}: {epic['title']}", ""]
         if epic.get("businessOutcome"):
@@ -170,9 +190,20 @@ def backlog_markdown(backlog: dict) -> str:
                 if s.get("description"):
                     lines += [s["description"], ""]
                 est = s.get("estimation")
-                if est and est.get("uplift"):
-                    why = "; ".join(f"{f['finding']} (+{f['points']})" for f in est["factors"])
-                    lines += [f"*Estimate: {est['base']} base + {est['uplift']} legacy complexity. {why}*", ""]
+                if est and "humanPoints" in est:
+                    lines += [f"*AI-assisted {est['aiPoints']} pts vs manual {est['humanPoints']} pts "
+                              f"({round(est['aiEfficiency'] * 100)}% AI efficiency)"
+                              f"{'. ' + '; '.join(est['notes']) if est.get('notes') else ''}*", ""]
+                if est and "complexity" in est:
+                    lines += ["| Factor | Level | Evidence |", "|---|---|---|"]
+                    for key, label in (("complexity", "Complexity"), ("work", "Amount of work"),
+                                       ("risk", "Risk & uncertainty")):
+                        f = est[key]
+                        lines.append(f"| {label} | {f['level']} ({f['label']}) | {'; '.join(f['evidence'])} |")
+                    lines += ["", f"*Sum {est['factorSum']} → {est['humanPoints']} pts manual. {est['reference']}. "
+                                  f"Confidence: {est['confidence']}.*", ""]
+                    if est.get("inputsNeeded"):
+                        lines += ["**Inputs needed to size it:** " + "; ".join(est["inputsNeeded"]), ""]
                 lines += ["**Acceptance criteria**", "", "```gherkin"]
                 for a in s.get("acceptanceCriteria", []):
                     lines += [a, ""]

@@ -221,7 +221,8 @@ def _priority(rule: dict) -> int:
     return 0 if rule["trustBoundary"] == DETERMINISTIC_CORE else 1
 
 
-def _branch_rules(sir_id: str, start_n: int, flow: dict, wf: dict | None, src: _Source) -> tuple[list[dict], list[dict]]:
+def _branch_rules(sir_id: str, start_n: int, flow: dict, wf: dict | None, src: _Source,
+                  limit: int = 4) -> tuple[list[dict], list[dict]]:
     """Guard / validation lines of the entry method body (if/throw/BadRequest...), plus its parameter list."""
     if not wf:
         return [], []
@@ -241,9 +242,27 @@ def _branch_rules(sir_id: str, start_n: int, flow: dict, wf: dict | None, src: _
                                file=file, line=ln, src=src, classification="Validation / Control Flow",
                                kind="deterministic_business_rule", trust=APPLICATION_LOGIC,
                                statement=f"Branches on: {text.strip().rstrip('{').strip()[:110]}"))
-        if len(rules) >= 4:
+        if len(rules) >= limit:
             break
     return rules, _parse_params(params)
+
+
+MAX_GUARD_CONDITIONS = 12
+
+
+def _guard_rule(branch: list[dict]) -> list[dict]:
+    """A method's if/throw/BadRequest lines are the conditions of ONE business rule (request validation),
+    not a rule each: a branch is a decision point inside a behaviour, not a requirement of its own."""
+    if not branch:
+        return []
+    conds = [b["statement"].removeprefix("Branches on: ") for b in branch]
+    first = branch[0]
+    return [{**first,
+             "statement": ("Validates the request before processing: " + "; ".join(conds))[:300],
+             "classification": "Validation / Control Flow",
+             "conditions": conds,
+             "conditionLines": [b["legacyLines"] for b in branch],
+             "snippet": "\n".join(b["snippet"] for b in branch)[:800]}]
 
 
 def _workflow_contract(sir_id: str, flow: dict, wf: dict | None, src: _Source, label: dict[str, str],
@@ -260,8 +279,8 @@ def _workflow_contract(sir_id: str, flow: dict, wf: dict | None, src: _Source, l
             rules.append(r)
     rules.sort(key=_priority)  # stable: keeps source order within a class
     rules = rules[:MAX_RULES]
-    branch, inputs = _branch_rules(sir_id, 0, flow, wf, src)
-    rules = (branch + rules)[:MAX_RULES + 4]
+    branch, inputs = _branch_rules(sir_id, 0, flow, wf, src, limit=MAX_GUARD_CONDITIONS)
+    rules = (_guard_rule(branch) + rules)[:MAX_RULES + 1]
     for i, r in enumerate(rules, 1):
         r["ruleId"] = f"{sir_id}.R{i}"
     reads, writes = flow["tablesRead"], flow["tablesWritten"]

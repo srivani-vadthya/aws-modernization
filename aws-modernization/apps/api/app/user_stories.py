@@ -91,12 +91,17 @@ _REFINE_SYSTEM = (
     "- Acceptance criteria: one Gherkin Scenario per string, starting with 'Scenario:', with real values, literals "
     "and error texts copied from the rule or snippet. Any other test data must be a placeholder in angle brackets, "
     "e.g. <organization name> or <claim id>: never invent names, ids or amounts. Keep a parity scenario.\n"
-    "- Stories are INVEST sized (Fibonacci 1,2,3,5,8; never more than 8).\n"
+    "- A functional story is one piece of legacy behaviour (one legacy method) and covers every rule in its "
+    "`rules` list: keep at least one Scenario per rule (closely related rules may share a scenario) plus the parity "
+    "scenario, at most 8 scenarios. Never drop a rule.\n"
+    "- Stories are INVEST sized on Fibonacci 1,2,3,5,8,13 (13 should be split, 21 must be split).\n"
     "- NEVER change the meaning of a rule whose trustBoundary starts with 'Deterministic': keep its numbers, rounding, "
     "literals and conditions exactly as written.\n"
-    "- Each story carries an `estimation` computed from legacy-complexity evidence (coupling, data layer, "
-    "testability, integrations, security, unknowns). Keep its storyPoints at or above estimation.points; you may "
-    "raise them if the rule is harder than the evidence shows, never lower. Mention the main legacy risk of a story "
+    "- Each story carries an `estimation` scored on Complexity, Amount of Work and Risk & Uncertainty (1-5 each, with "
+    "evidence), relative to a reference story, plus an AI-assisted estimate: storyPoints = estimation.aiPoints, "
+    "the effort for a team using AI with the SIR as context; estimation.humanPoints is the manual baseline. Keep "
+    "storyPoints at or above estimation.points and at or below estimation.humanPoints; raise them only if the rule "
+    "is harder than the evidence shows, never lower. Mention the main legacy risk of a story "
     "in its description, and cover the adjacent workflows in `legacyAssessment.regressionScope` in the flow story's "
     "scenarios.\n"
     "- NEVER invent behaviour. If a rule is ambiguous, garbled or truncated, add an openQuestion instead of guessing.\n"
@@ -110,15 +115,18 @@ def _feature_view(epic: dict, feature: dict, sirs: dict[str, dict], subset: list
     stories = []
     for s in subset if subset is not None else feature["stories"]:
         t = s["trace"]
-        rule = rules.get(t.get("ruleId")) or {}
+        story_rules = [rules[r] for r in (t.get("ruleIds") or []) if r in rules] if s["type"] == "functional" else []
+        view_rules = [{"ruleId": r.get("ruleId"), "statement": r.get("statement"),
+                       "classification": r.get("classification"), "trustBoundary": r.get("trustBoundary"),
+                       "legacyLines": r.get("legacyLines"), "snippet": (r.get("snippet") or "")[:300]}
+                      for r in story_rules]
         stories.append({
             "id": s["id"], "type": s["type"], "title": s["title"], "narrative": s["narrative"],
             "description": s["description"], "acceptanceCriteria": s["acceptanceCriteria"],
             "storyPoints": s["storyPoints"], "priority": s["priority"], "estimation": s.get("estimation"),
-            "rule": {"ruleId": rule.get("ruleId"), "statement": rule.get("statement"),
-                     "classification": rule.get("classification"), "trustBoundary": rule.get("trustBoundary"),
-                     "legacyLines": rule.get("legacyLines"), "snippet": (rule.get("snippet") or "")[:500]}
-            if rule else {"ruleIds": t.get("ruleIds")}})
+            # a functional story is one piece of legacy behaviour: every rule in it must stay covered
+            "rule": view_rules[0] if view_rules else {"ruleIds": t.get("ruleIds")},
+            "rules": view_rules})
     return {"epic": {"title": epic["title"], "businessOutcome": epic.get("businessOutcome")},
             "defaultPersona": feature["stories"][0]["narrative"]["asA"] if feature["stories"] else "",
             "feature": {"id": feature["id"], "title": feature["title"], "summary": feature["description"],
@@ -152,7 +160,7 @@ def _story_text(s: dict) -> str:
     return "\n".join([s["title"], n["asA"], n["iWant"], n["soThat"], s["description"], *s["acceptanceCriteria"]])
 
 
-def _apply_story(story: dict, upd: dict, rule: dict | None) -> str | None:
+def _apply_story(story: dict, upd: dict, rule: dict | list[dict] | None) -> str | None:
     """Apply an LLM rewrite to one story. Returns None on success, or the reason it was rejected."""
     nar = upd.get("narrative") or {}
     if not isinstance(nar, dict) or not all(isinstance(nar.get(k), str) and nar[k].strip()
@@ -169,14 +177,21 @@ def _apply_story(story: dict, upd: dict, rule: dict | None) -> str | None:
                      narrative={k: nar[k].strip() for k in ("asA", "iWant", "soThat")},
                      description=str(upd.get("description") or story["description"]).strip()[:800],
                      acceptanceCriteria=[a.strip() for a in ac])
-    if rule and str(rule.get("trustBoundary", "")).startswith("Deterministic"):
-        text = _story_text(candidate).lower()
-        lost = [lit for lit in _literals(rule) if lit.lower() not in text]
-        if lost:
-            return f"deterministic-core rule: rewrite dropped literal(s) {lost}"
+    rules = rule if isinstance(rule, list) else [rule] if rule else []
+    text = _story_text(candidate).lower()
+    for r in rules:
+        if str(r.get("trustBoundary", "")).startswith("Deterministic"):
+            lost = [lit for lit in _literals(r) if lit.lower() not in text]
+            if lost:
+                return f"deterministic-core rule {r.get('ruleId')}: rewrite dropped literal(s) {lost}"
     story.update({k: candidate[k] for k in ("title", "narrative", "description", "acceptanceCriteria")})
-    floor = (story.get("estimation") or {}).get("points", 0)   # evidence-based minimum; the LLM cannot go below it
-    story["storyPoints"] = max(bm.snap_points(upd.get("storyPoints", story["storyPoints"])), floor)
+    est = story.get("estimation") or {}
+    floor = est.get("points", 0)                     # AI-assisted, evidence-based minimum; the LLM cannot go below it
+    ceiling = est.get("humanPoints", bm.MAX_POINTS)  # ...nor above the manual (no-AI) baseline
+    story["storyPoints"] = min(max(bm.snap_points(upd.get("storyPoints", story["storyPoints"])), floor),
+                               max(ceiling, floor))
+    if est.get("humanPoints"):
+        est.update(aiPoints=story["storyPoints"], aiEfficiency=round(1 - story["storyPoints"] / est["humanPoints"], 2))
     if upd.get("priority") in bm.PRIORITIES:
         story["priority"] = upd["priority"]
     labels = [x for x in (upd.get("labels") or []) if isinstance(x, str) and SAFE_LABEL.match(x)]
@@ -229,7 +244,8 @@ def _refine(backlog: dict, sirs: list[dict]) -> dict:
             upd = updates.get(story["id"])
             if not upd:
                 continue
-            why = _apply_story(story, upd, rules.get(story["trace"].get("ruleId")))
+            story_rules = [rules[r] for r in (story["trace"].get("ruleIds") or []) if r in rules]
+            why = _apply_story(story, upd, story_rules if story["type"] == "functional" else None)
             if why:
                 rejected.append({"storyId": story["id"], "reason": why})
         for q in parsed.get("openQuestions") or []:
@@ -264,7 +280,8 @@ def generate(eng: dict, *, refine: bool = True, epic: str | None = None, persona
     backlog = sts.build_backlog(
         sirs, epic=None, persona=persona or determined.get("persona"),
         module_names={cap_id: title} if cap_id and title else None,
-        source={"engagementId": eng["id"], "engagement": eng.get("name"), "scope": scope.get("name")})
+        source={"engagementId": eng["id"], "engagement": eng.get("name"), "scope": scope.get("name")},
+        ai_capability=eng.get("aiCapability"), team=eng.get("teamContext"))
     for e in backlog["epics"]:
         if determined.get("description"):
             e["description"] = determined["description"]
@@ -278,6 +295,10 @@ def generate(eng: dict, *, refine: bool = True, epic: str | None = None, persona
         refinement = _refine(backlog, sirs)
         if epic_model and not refinement["model"]:
             refinement["model"] = epic_model
+        for e in backlog["epics"]:   # the LLM may raise story points: refresh the human vs AI rollups
+            for f in e["features"]:
+                sts.rollup(f, f["stories"])
+            sts.rollup(e, [s for f in e["features"] for s in f["stories"]])
     issues = [{"level": lvl, "message": msg} for lvl, msg in bm.validate(backlog)]
     out = artifacts_dir(eng["id"])
     (out / "sir.json").write_text(json.dumps({"semantic_ir": sirs}, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -285,14 +306,14 @@ def generate(eng: dict, *, refine: bool = True, epic: str | None = None, persona
     (out / "backlog.md").write_text(bm.backlog_markdown(backlog), encoding="utf-8")
     scripts_out = out / "scripts"
     scripts_out.mkdir(exist_ok=True)
-    for f in ("sir_to_stories.py", "backlog_model.py", "push_backlog.py"):
+    for f in ("sir_to_stories.py", "estimation.py", "backlog_model.py", "push_backlog.py"):
         shutil.copy2(SCRIPTS_DIR / f, scripts_out / f)
     shutil.copy2(SKILL_DIR / "tracker-config.example.json", out / "tracker-config.example.json")
     eng["userStories"] = {
         "generatedAt": _now(), "scope": cap_id, "sirIds": [s["id"] for s in sirs], "backlog": backlog,
         "counts": bm.counts(backlog), "validation": issues, "refinement": refinement,
         "epicDetermination": {"status": "llm" if determined else "deterministic", "model": epic_model},
-        "files": ["sir.json", "backlog.json", "backlog.md", "scripts/sir_to_stories.py", "scripts/backlog_model.py",
+        "files": ["sir.json", "backlog.json", "backlog.md", "scripts/sir_to_stories.py", "scripts/estimation.py", "scripts/backlog_model.py",
                   "scripts/push_backlog.py", "tracker-config.example.json"],
         "commands": [
             "python scripts/sir_to_stories.py sir.json --out backlog.json --markdown backlog.md",
