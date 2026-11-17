@@ -1,0 +1,242 @@
+{
+  "semantic_ir": [
+    {
+      "id": "SIR-001",
+      "module": "claim",
+      "name": "Claim: Edit",
+      "summary": "ClaimController.Edit: reads Claim, ClaimStatus, Client, Policy; writes Claim.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "int",
+          "required": true
+        }
+      ],
+      "rules": [
+        {
+          "ruleId": "SIR-001.R1",
+          "statement": "Branches on: if (item.IsOrganization)",
+          "classification": "Validation / Control Flow",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L133:BRANCH",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L133",
+          "snippet": "if (item.IsOrganization)\n    item.ClientName = item.OrganizationName;",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R2",
+          "statement": "Persists changes to Claim",
+          "classification": "State Mutation",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L159:WRITES",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L159",
+          "snippet": "Uow.Claims.Update(entity);\nUow.SaveChanges();",
+          "trustBoundary": "Deterministic Core (Must not be altered by LLM)",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R3",
+          "statement": "Reads Claim",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L122:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L122",
+          "snippet": "var vm = Uow.Claims.GetAll()\n                .Where(c => c.Id == id)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R4",
+          "statement": "Reads Client",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L128:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L128",
+          "snippet": "clients = Uow.Clients.GetAll()\n        .Where(c => c.Policies.Count() != 0)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R5",
+          "statement": "Reads ClaimStatus",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L139:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L139",
+          "snippet": "statuses = Uow.ClaimStatuses.GetAll().ToList();\nvm.Statuses = statuses;",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R6",
+          "statement": "Reads Policy",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L142:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L142",
+          "snippet": "var policies = Uow.Policies.GetAll()\n    .Where(p => p.ClientId == vm.ClientId)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R7",
+          "statement": "Reads Claim",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L166:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L166",
+          "snippet": "var vm = Uow.Claims.GetAll()\n            .Where(c => c.Id == id)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R8",
+          "statement": "Reads Client",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L172:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L172",
+          "snippet": "clients = Uow.Clients.GetAll()\n        .ProjectTo<ExistingClientsViewModel>().ToList();",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R9",
+          "statement": "Reads ClaimStatus",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Edit:L182:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L182",
+          "snippet": "statuses = Uow.ClaimStatuses.GetAll().ToList();\nvm.Statuses = statuses;",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R10",
+          "statement": "Infrastructure call ApplicationUnit.SaveChanges",
+          "classification": "Legacy Plumbing",
+          "kind": "legacy_plumbing_pruned",
+          "astNode": "AST:ClaimController.Edit:L160:CALLS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L160",
+          "snippet": "Uow.SaveChanges();",
+          "trustBoundary": "Pruned — replaced by cloud framework",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-001.R11",
+          "statement": "Infrastructure call DataContext.SaveChanges",
+          "classification": "Legacy Plumbing",
+          "kind": "legacy_plumbing_pruned",
+          "astNode": "AST:ApplicationUnit.SaveChanges:L288:CALLS",
+          "legacyLines": "IMS.Data/ApplicationUnit.cs#L288",
+          "snippet": "_context.SaveChanges();\n}",
+          "trustBoundary": "Pruned — replaced by cloud framework",
+          "source": "deterministic"
+        }
+      ],
+      "stateMachine": "RECEIVE_REQUEST -> READ_CLAIM -> READ_CLIENT -> READ_CLAIM_STATUS -> READ_POLICY -> WRITE_CLAIM -> COMPLETE",
+      "sideEffects": [
+        "Persists changes to Claim"
+      ],
+      "integrations": []
+    },
+    {
+      "id": "SIR-002",
+      "module": "claim",
+      "name": "Claim: Create",
+      "summary": "ClaimController.Create: reads ClaimStatus, Client; writes Claim.",
+      "inputs": [
+        {
+          "name": "returnUrl",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "rules": [
+        {
+          "ruleId": "SIR-002.R1",
+          "statement": "Branches on: if (item.IsOrganization)",
+          "classification": "Validation / Control Flow",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Create:L81:BRANCH",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L81",
+          "snippet": "if (item.IsOrganization)\n    item.ClientName = item.OrganizationName;",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R2",
+          "statement": "Persists changes to Claim",
+          "classification": "State Mutation",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Create:L105:WRITES",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L105",
+          "snippet": "Uow.Claims.Add(entity);\nUow.SaveChanges();",
+          "trustBoundary": "Deterministic Core (Must not be altered by LLM)",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R3",
+          "statement": "Reads Client",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Create:L76:READS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L76",
+          "snippet": "clients = Uow.Clients.GetAll()\n        .Where(c => c.Policies.Count() != 0)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R4",
+          "statement": "Delegates to AttributeProviderService.GetClaimStatusIdFromName",
+          "classification": "Orchestration",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:ClaimController.Create:L102:CALLS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L102",
+          "snippet": "model.StatusId = AttributeProviderSvc.GetClaimStatusIdFromName(\"new\");",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R5",
+          "statement": "Reads ClaimStatus",
+          "classification": "Data Retrieval",
+          "kind": "deterministic_business_rule",
+          "astNode": "AST:AttributeProviderService.GetClaimStatusIdFromName:L77:READS",
+          "legacyLines": "IMS.WebMvc/Services/AttributeProviderService.cs#L77",
+          "snippet": "var statusId = _uow.ClaimStatuses.GetAll()\n        .Where(i => i.Name.ToLower() == statusName)",
+          "trustBoundary": "Application Logic",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R6",
+          "statement": "Infrastructure call ApplicationUnit.SaveChanges",
+          "classification": "Legacy Plumbing",
+          "kind": "legacy_plumbing_pruned",
+          "astNode": "AST:ClaimController.Create:L106:CALLS",
+          "legacyLines": "IMS.WebMvc/Controllers/ClaimController.cs#L106",
+          "snippet": "Uow.SaveChanges();",
+          "trustBoundary": "Pruned — replaced by cloud framework",
+          "source": "deterministic"
+        },
+        {
+          "ruleId": "SIR-002.R7",
+          "statement": "Infrastructure call DataContext.SaveChanges",
+          "classification": "Legacy Plumbing",
+          "kind": "legacy_plumbing_pruned",
+          "astNode": "AST:ApplicationUnit.SaveChanges:L288:CALLS",
+          "legacyLines": "IMS.Data/ApplicationUnit.cs#L288",
+          "snippet": "_context.SaveChanges();\n}",
+          "trustBoundary": "Pruned — replaced by cloud framework",
+          "source": "deterministic"
+        }
+      ],
+      "stateMachine": "RECEIVE_REQUEST -> READ_CLIENT -> CALL_GET_CLAIM_STATUS_ID_FROM_NAME -> WRITE_CLAIM -> COMPLETE",
+      "sideEffects": [
+        "Persists changes to Claim"
+      ],
+      "integrations": []
+    }
+  ]
+}

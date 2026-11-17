@@ -10,6 +10,11 @@ const TYPE_PALETTE: Record<string, { bg: string; text: string; border: string }>
   program:    { bg: "#eff6ff", text: "#1d4ed8", border: "#93c5fd" },
   table:      { bg: "#f0fdf4", text: "#15803d", border: "#86efac" },
   event:      { bg: "#f0fdfa", text: "#0f766e", border: "#5eead4" },
+  entity:     { bg: "#f0fdf4", text: "#15803d", border: "#86efac" },
+  view:       { bg: "#fdf2f8", text: "#be185d", border: "#f9a8d4" },
+  frontend:   { bg: "#fdf2f8", text: "#9d174d", border: "#f472b6" },
+  external:   { bg: "#fff7ed", text: "#c2410c", border: "#fdba74" },
+  config:     { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" },
 };
 
 const ROLE_BADGE: Record<string, string> = {
@@ -31,7 +36,19 @@ const EDGE_COLOR: Record<string, string> = {
   EMITS_EVENT:  "#0f766e",
   CONTAINS:     "#94a3b8",
   FIELD_LINEAGE:"#64748b",
+  ACCESSES_DATA:"#dc2626",
+  HTTP_CALLS:   "#db2777",
+  INVOKES_EXTERNAL: "#ea580c",
+  REFERENCES:   "#16a34a",
+  INHERITS:     "#64748b",
+  IMPLEMENTS:   "#64748b",
+  RENDERS:      "#f472b6",
+  BINDS_MODEL:  "#f9a8d4",
 };
+
+// Above this many edges, labels and capability-membership edges are hidden so the canvas stays usable;
+// membership is already shown by the column layout.
+const DENSE_GRAPH_EDGES = 300;
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -101,11 +118,13 @@ export function AKGGraphView({
       };
     });
 
-    const edges: Edge[] = graph.edges.map((e) => ({
+    const dense = graph.edges.length > DENSE_GRAPH_EDGES;
+    const shown = dense ? graph.edges.filter((e) => e.kind !== "CONTAINS") : graph.edges;
+    const edges: Edge[] = shown.map((e) => ({
       id: e.id,
       source: e.source,
       target: e.target,
-      label: e.kind,
+      label: dense ? undefined : e.kind,
       animated: e.kind === "CALLS" || e.kind === "EMITS_EVENT",
       style: {
         stroke: EDGE_COLOR[e.kind] ?? "#94a3b8",
@@ -153,7 +172,7 @@ export function AKGGraphView({
       {/* Legend */}
       <div className="absolute bottom-10 left-3 flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-sm text-[10px]">
         {Object.entries(EDGE_COLOR)
-          .filter(([k]) => ["CALLS", "READS", "WRITES", "OWNS_DATA", "EMITS_EVENT", "TRIGGERED_BY"].includes(k))
+          .filter(([k]) => graph.statistics.edgesByKind[k])
           .map(([kind, color]) => (
             <span key={kind} className="flex items-center gap-1 font-mono font-semibold" style={{ color }}>
               <span style={{ display: "inline-block", width: 16, height: 2, background: color, borderRadius: 1 }} />

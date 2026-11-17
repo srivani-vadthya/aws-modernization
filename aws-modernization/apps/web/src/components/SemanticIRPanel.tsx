@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { Engagement, SemanticIR } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, type Engagement, type SemanticIR } from "../api";
 
 const KIND_BADGE: Record<string, string> = {
   deterministic_business_rule: "bg-blue-100 text-blue-700 border-blue-200",
@@ -17,7 +17,7 @@ function trustColor(boundary = ""): string {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
-export function SemanticIRPanel({ e }: { e: Engagement }) {
+export function SemanticIRPanel({ e, onChange }: { e: Engagement; onChange: (eng: Engagement) => void }) {
   const allSIR: SemanticIR[] = e.seed?.semantic_ir ?? [];
   const scopeCapId = e.scope?.capabilityId ?? null;
 
@@ -28,6 +28,34 @@ export function SemanticIRPanel({ e }: { e: Engagement }) {
 
   const [selectedId, setSelectedId] = useState<string>(sirList[0]?.id ?? "");
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const attempted = useRef<string | null>(null);
+
+  async function generate(force: boolean) {
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const updated = await api.generateSir(e.id, force);
+      setSelectedId("");
+      onChange(updated);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // The SIR is derived from the AKG/AST of the scoped module the first time this screen is opened.
+  const needsGeneration =
+    !!scopeCapId && sirList.length === 0 && e.sirMeta?.capabilityId !== scopeCapId;
+  useEffect(() => {
+    const key = `${e.id}:${scopeCapId}`;
+    if (!needsGeneration || attempted.current === key) return;
+    attempted.current = key;
+    void generate(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e.id, scopeCapId, needsGeneration]);
 
   const selected = sirList.find((s) => s.id === selectedId) ?? sirList[0];
 
@@ -39,18 +67,36 @@ export function SemanticIRPanel({ e }: { e: Engagement }) {
     );
   }
 
-  if (allSIR.length === 0) {
+  if (generating || needsGeneration) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
-        No Semantic IR available. Approve the Discovery gate to generate the Semantic Intermediate Representation.
+      <div className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50/60 p-6 text-sm text-violet-900">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
+        <div>
+          <p className="font-semibold">Deriving the Semantic IR for {e.scope?.name}…</p>
+          <p className="mt-0.5 text-xs text-violet-800">
+            Tracing the module's use cases through the AST/AKG, then asking the LLM to word each contract from that
+            evidence. This can take a minute.
+          </p>
+        </div>
       </div>
     );
   }
 
   if (sirList.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
-        No Semantic IR contracts were found for the selected scope.
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+        <p>
+          {genError
+            ? `Semantic IR generation failed: ${genError}`
+            : "No Semantic IR contracts could be derived for this module: the AKG has no traced flows or operational relationships for it. Choose another scope, or re-run discovery."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void generate(true)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -85,8 +131,27 @@ export function SemanticIRPanel({ e }: { e: Engagement }) {
                 Scoped: {e.scope?.name}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => void generate(true)}
+              disabled={generating}
+              className="rounded border border-slate-300 bg-white px-2.5 py-1 font-sans font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              title="Re-derive the contracts from the AKG/AST and re-run the LLM wording"
+            >
+              Regenerate
+            </button>
           </div>
         </div>
+        {genError && <p role="alert" className="mt-2 text-xs text-red-700">Regeneration failed: {genError}</p>}
+        {e.sirMeta?.capabilityId === scopeCapId && (
+          <p className="mt-3 border-t border-violet-100 pt-2 text-[11px] text-slate-500">
+            Derived from {e.sirMeta.basis}. Rule locations, snippets and AST nodes are read from the source; the{" "}
+            {e.sirMeta.llm.status === "ok"
+              ? `wording of ${e.sirMeta.llm.lifted} contract(s) was lifted by ${e.sirMeta.llm.model}`
+              : "LLM was unavailable, so wording is derived from the AST alone"}
+            .
+          </p>
+        )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
@@ -131,6 +196,11 @@ export function SemanticIRPanel({ e }: { e: Engagement }) {
                   <span className="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-[9px] text-slate-500 font-mono">
                     {sir.module}
                   </span>
+                  {sir.origin && (
+                    <span className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${sir.origin === "llm" ? "bg-violet-50 border-violet-200 text-violet-700" : "bg-slate-50 border-slate-200 text-slate-500"}`}>
+                      {sir.origin === "llm" ? "AI-worded" : "AST-derived"}
+                    </span>
+                  )}
                 </div>
               </button>
             );
@@ -261,6 +331,9 @@ export function SemanticIRPanel({ e }: { e: Engagement }) {
                           <span className="text-xs text-slate-800 truncate">{rule.statement}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 ml-3">
+                          {rule.source === "llm" && (
+                            <span className="hidden sm:block rounded bg-violet-50 border border-violet-200 px-2 py-0.5 text-[10px] font-bold text-violet-700">AI-worded</span>
+                          )}
                           {rule.classification && (
                             <span className="hidden sm:block rounded bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] text-slate-600 font-medium">
                               {rule.classification}
