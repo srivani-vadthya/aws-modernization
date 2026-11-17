@@ -1,0 +1,9 @@
+/* LIFE400 — interactive entry. CALL STRTLIFE from command line. */
+             PGM
+             DCL        VAR(&LIB) TYPE(*CHAR) LEN(10) VALUE('LIFE400')
+             ADDLIBLE   LIB(&LIB)
+             MONMSG     MSGID(CPF2103)
+
+             CALL       PGM(MAINMENU)
+
+             ENDPGM

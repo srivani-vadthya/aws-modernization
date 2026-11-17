@@ -1,0 +1,28 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PREMCALC.
+      * Modal premium: annual base * gender/smoker/UW factors * mode load
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-FACTOR         PIC 9V999 VALUE 1.000.
+       01  WS-MODE-LOAD      PIC 9V999 VALUE 1.000.
+       LINKAGE SECTION.
+       01  LK-AGE            PIC 999.
+       01  LK-SEX            PIC X.
+       01  LK-SMOKER         PIC X.
+       01  LK-UWCLS          PIC X.
+       01  LK-MODE           PIC X.
+       01  LK-BASE           PIC 9(9)V99.
+       01  LK-PREM           PIC 9(9)V99.
+       PROCEDURE DIVISION USING LK-AGE LK-SEX LK-SMOKER
+             LK-UWCLS LK-MODE LK-BASE LK-PREM.
+           MOVE 1.000 TO WS-FACTOR
+           IF LK-SEX = "M" ADD 0.050 TO WS-FACTOR END-IF
+           IF LK-SMOKER = "Y" ADD 0.250 TO WS-FACTOR END-IF
+           IF LK-UWCLS = "B" ADD 0.150 TO WS-FACTOR END-IF
+           IF LK-MODE = "M" MOVE 0.090 TO WS-MODE-LOAD
+           ELSE IF LK-MODE = "Q" MOVE 0.265 TO WS-MODE-LOAD
+           ELSE IF LK-MODE = "S" MOVE 0.520 TO WS-MODE-LOAD
+           ELSE MOVE 1.000 TO WS-MODE-LOAD
+           END-IF
+           COMPUTE LK-PREM = LK-BASE * WS-FACTOR * WS-MODE-LOAD
+           GOBACK.

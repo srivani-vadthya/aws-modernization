@@ -1,0 +1,23 @@
+     A                                      DSPSIZ(24 80 *DS3)
+     A          R NBUWFMT
+     A                                  1  2'NBUWMNT  NEW BUSINESS'
+     A                                  4  2'Customer . . .'
+     A            CUSTNO         9S 0B  4 20
+     A                                  5  2'DOB . . . . . .'
+     A            DOB             L  B  5 20
+     A                                  6  2'Sex (M/F) . . .'
+     A            SEX            1A  B  6 20
+     A                                  7  2'Smoker . . . .'
+     A            SMOKER         1A  B  7 20
+     A                                  8  2'Occup class . .'
+     A            OCCCLS         2A  B  8 20
+     A                                  9  2'Plan . . . . .'
+     A            PLANCD         5A  B  9 20
+     A                                 10  2'Sum assured . .'
+     A            SUMASS        11S 0B 10 20
+     A                                 11  2'Mode A/S/Q/M .'
+     A            MODE           1A  B 11 20
+     A                                 12  2'Premium . . . .'
+     A            PREM          11S 2B 12 20
+     A                                 22  2'Message:'
+     A            MSG           50A  O 22 12

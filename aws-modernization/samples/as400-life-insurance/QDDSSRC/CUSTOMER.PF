@@ -1,0 +1,13 @@
+     A                                      UNIQUE
+     A          R CUSTREC
+     A            CUSTNO         9S 0       TEXT('Customer number')
+     A            CUSTNM        40A         TEXT('Customer name')
+     A            DOB             L         TEXT('Date of birth')
+     A            SEX            1A         TEXT('M/F')
+     A            SMOKER         1A         TEXT('Y/N')
+     A            OCCCLS         2A         TEXT('Occupation class')
+     A            ADDR1         40A
+     A            CITY          25A
+     A            STATE          2A
+     A            ZIP            9A
+     A          K CUSTNO

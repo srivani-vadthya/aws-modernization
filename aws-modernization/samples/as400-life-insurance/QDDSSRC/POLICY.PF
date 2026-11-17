@@ -1,0 +1,13 @@
+     A                                      UNIQUE
+     A          R POLREC
+     A            POLNO         12A         TEXT('Policy number')
+     A            CUSTNO         9S 0       TEXT('Customer number')
+     A            PLANCD         5A         TEXT('Plan T1001/T2001/T6501')
+     A            STATUS         1A         TEXT('A/G/L/C/D')
+     A            ISSDTE          L         TEXT('Issue date')
+     A            SUMASS        11S 0       TEXT('Sum assured')
+     A            PREM          11S 2       TEXT('Modal premium')
+     A            MODE           1A         TEXT('A/S/Q/M')
+     A            UWCLS          1A         TEXT('P/S/B/X')
+     A            NEXTCY          L         TEXT('Next billing date')
+     A          K POLNO

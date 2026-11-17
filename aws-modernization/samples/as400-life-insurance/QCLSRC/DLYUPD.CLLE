@@ -1,0 +1,11 @@
+/* Nightly batch: new business -> servicing/billing -> claims */
+             PGM
+             DCL        VAR(&DATE) TYPE(*CHAR) LEN(8)
+             RTVSYSVAL  SYSVAL(QDATE) RTNVAR(&DATE)
+
+             SBMJOB     CMD(CALL PGM(NBUWB)) JOB(NBUWB) JOBQ(LIFEBATCH)
+             SBMJOB     CMD(CALL PGM(SVCBILB)) JOB(SVCBILB) JOBQ(LIFEBATCH)
+             SBMJOB     CMD(CALL PGM(CLMADJB)) JOB(CLMADJB) JOBQ(LIFEBATCH)
+
+             SNDPGMMSG  MSG('LIFE400 daily update submitted') MSGTYPE(*COMP)
+             ENDPGM

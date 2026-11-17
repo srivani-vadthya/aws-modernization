@@ -1,0 +1,8 @@
+     A          R CLMFMT
+     A                                  1  2'CLMMNT  CLAIMS'
+     A            POLNO         12A  B  4 20
+     A            CLMTYP         1A  B  5 20
+     A            DOD             L  B  6 20
+     A            SUICIDE        1A  B  7 20
+     A            DEDUCT        11S 2B  8 20
+     A            MSG           50A  O 22  2

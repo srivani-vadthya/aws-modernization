@@ -1,0 +1,27 @@
+# Local credentials (examples must contain placeholders only)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Dependencies, caches and build outputs
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+.next/
+*.tsbuildinfo
+_discovery_runs/
+
+# Local engagement data and reports
+aws-modernization/apps/api/data/
+!aws-modernization/apps/api/data/.gitkeep
+test-results/
+playwright-report/
+*.log

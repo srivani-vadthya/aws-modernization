@@ -1,0 +1,6 @@
+     A          R SVCFMT
+     A                                  1  2'SVCMNT  POLICY SERVICING'
+     A            POLNO         12A  B  4 20
+     A            ACTION         6A  B  6 20
+     A            NEWSUM        11S 0B  8 20
+     A            MSG           50A  O 22  2

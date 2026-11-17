@@ -1,0 +1,12 @@
+     A                                      UNIQUE
+     A          R CLMREC
+     A            CLMNO         12A
+     A            POLNO         12A
+     A            CLMTYP         1A         TEXT('D=Death')
+     A            DOD             L         TEXT('Date of death')
+     A            STATUS         1A         TEXT('O/I/P/R')
+     A            GROSS         11S 2
+     A            DEDUCT        11S 2
+     A            NETPAY        11S 2
+     A            PAYMTH         3A         TEXT('CHK/ACH')
+     A          K CLMNO
