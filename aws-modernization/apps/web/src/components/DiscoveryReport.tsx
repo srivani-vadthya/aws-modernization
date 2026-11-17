@@ -389,10 +389,6 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
                                             report.summary.applicationLoc.toLocaleString(),
                                         ],
                                         [
-                                            'Proposed business modules',
-                                            report.summary.proposedModules,
-                                        ],
-                                        [
                                             'Integration reference groups',
                                             report.summary.integrationGroups,
                                         ],
