@@ -502,9 +502,47 @@ FILES_DOTNET = {
 }
 
 
-def write_dotnet_generated(dest: Path) -> None:
-    dest.mkdir(parents=True, exist_ok=True)
+def get_backend_template_dir() -> Path:
+    """Return the repo-level BackendTemplate directory used as the canonical .NET backend source of truth."""
+    return Path(__file__).resolve().parents[4] / "BackendTemplate" / "StarterApp"
+
+
+def get_frontend_template_dir() -> Path:
+    """Return the repo-level FrontendTemplate directory used as the canonical React frontend source of truth."""
+    return Path(__file__).resolve().parents[4] / "FrontendTemplate"
+
+
+def write_frontend_generated(dest: Path | None = None) -> None:
+    target = Path(dest) if dest is not None else get_frontend_template_dir()
+    target.mkdir(parents=True, exist_ok=True)
     for rel, content in FILES_DOTNET.items():
-        path = dest / rel
+        if not rel.startswith("frontend/"):
+            continue
+        relative_path = rel.removeprefix("frontend/")
+        path = target / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+
+def write_dotnet_generated(dest: Path | None = None) -> None:
+    destinations = [Path(dest) if dest is not None else get_backend_template_dir()]
+    golden_template = get_backend_template_dir()
+    if golden_template not in destinations:
+        destinations.append(golden_template)
+
+    for target in destinations:
+        target.mkdir(parents=True, exist_ok=True)
+        for rel, content in FILES_DOTNET.items():
+            path = target / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
+            if rel.startswith("backend/"):
+                root_backend_path = target / rel.removeprefix("backend/")
+                root_backend_path.parent.mkdir(parents=True, exist_ok=True)
+                root_backend_path.write_text(content, encoding="utf-8")
+
+            if rel.startswith("frontend/"):
+                frontend_root_path = get_frontend_template_dir() / rel.removeprefix("frontend/")
+                frontend_root_path.parent.mkdir(parents=True, exist_ok=True)
+                frontend_root_path.write_text(content, encoding="utf-8")

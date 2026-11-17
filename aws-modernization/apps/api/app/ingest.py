@@ -107,9 +107,10 @@ def _finalize(eng: dict, source: Path, overlay_seed: bool) -> dict:
     lang = (target_info.get("language") or "").lower()
     stack = (target_info.get("stack") or "").lower()
     if any("c#" in s or ".net" in s for s in (lang, stack)):
-        from .generated_dotnet import write_dotnet_generated
+        from .generated_dotnet import write_dotnet_generated, write_frontend_generated
         gen_dir = store.engagement_dir(eng["id"]) / "artifacts" / "ims-modernized-service"
         write_dotnet_generated(gen_dir)
+        write_frontend_generated()
     elif overlay_seed:
         gen_dir = store.engagement_dir(eng["id"]) / "artifacts" / "motor-policy-service"
         write_generated(gen_dir)
