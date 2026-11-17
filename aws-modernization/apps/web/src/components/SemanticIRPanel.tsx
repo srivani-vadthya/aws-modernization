@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Engagement, type SemanticIR } from "../api";
+import { ScopeGraph } from "./ScopeGraph";
 
 const KIND_BADGE: Record<string, string> = {
   deterministic_business_rule: "bg-blue-100 text-blue-700 border-blue-200",
@@ -153,6 +154,8 @@ export function SemanticIRPanel({ e, onChange }: { e: Engagement; onChange: (eng
           </p>
         )}
       </div>
+
+      <ScopeGraph engagementId={e.id} capabilityId={scopeCapId} scopeName={e.scope?.name} />
 
       <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
         {/* Left: SIR contract list */}

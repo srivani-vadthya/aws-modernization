@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Engagement, type ScopeModule, type ScopeModules } from "../api";
 
-const RISK_CLS: Record<string, string> = {
-  critical: "bg-red-100 text-red-700 border-red-200",
-  high: "bg-amber-100 text-amber-800 border-amber-200",
-  medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
-};
+// Risk badge (low/medium/high) on the module cards is temporarily disabled (not deleted); re-enable with the badge below.
+// const RISK_CLS: Record<string, string> = {
+//   critical: "bg-red-100 text-red-700 border-red-200",
+//   high: "bg-amber-100 text-amber-800 border-amber-200",
+//   medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
+//   low: "bg-emerald-50 text-emerald-700 border-emerald-200",
+// };
 
 const KIND_CLS: Record<string, string> = {
   code: "bg-blue-50 text-blue-700 border-blue-200",
@@ -173,14 +174,20 @@ function ModuleCard({ m, active, disabled, onPick }: { m: ScopeModule; active: b
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
+          {m.modernization && (
+            <span title={`Suggested modernization order: ${m.modernization.reason}`}
+                  className="mb-1 inline-block rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
+              #{m.modernization.rank}
+            </span>
+          )}
           <span className={`block truncate text-sm font-bold ${active ? "text-blue-900" : "text-slate-900"}`}>{title}</span>
           {m.displayName && m.displayName !== m.name && (
             <span className="font-mono text-[10px] text-slate-400">{m.name}</span>
           )}
         </div>
-        <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase ${RISK_CLS[m.risk] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+        {/* <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase ${RISK_CLS[m.risk] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
           {m.risk}
-        </span>
+        </span> */}
       </div>
 
       <p className="mt-2 text-xs leading-relaxed text-slate-600">{m.businessSummary ?? m.summary}</p>

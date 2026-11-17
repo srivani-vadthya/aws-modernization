@@ -555,6 +555,7 @@ def test_estimates_score_three_factors_and_llm_cannot_go_below_it(eng, monkeypat
     assert not [i for i in user_stories.bm.validate(backlog) if i[0] == "ERROR"]
     upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
            "acceptanceCriteria": ["Scenario: x"], "storyPoints": 1}
+<<<<<<< HEAD
     ai = flow["storyPoints"]
     assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == ai
     upd["storyPoints"] = 21
@@ -597,3 +598,21 @@ def test_ai_capability_levels_scale_points(eng):
         assert not [i for i in user_stories.bm.validate(b) if i[0] == "ERROR"]
     assert totals["L0"] == c["humanPoints"], "no AI tools: AI-assisted equals the manual baseline"
     assert totals["L0"] >= totals["L1"] >= totals["L2"] >= totals["L3"]
+=======
+    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == 8
+
+
+def test_modules_are_ordered_most_used_first():
+    def mod(i, name, deps=(), shared=False):
+        return {"id": i, "name": name, "shared": shared, "dependsOn": list(deps), "sharedKernels": [],
+                "riskScore": None, "metrics": {"loc": 100, "useCases": 1}}
+    mods = [mod("a", "App", deps=["Core", "Mid", "Platform"]),
+            mod("m", "Mid", deps=["Core", "Platform"]),
+            mod("c", "Core", deps=["Platform"]),
+            mod("p", "Platform", shared=True)]
+    out = scope_modules._rank_for_modernization(mods, {m["name"]: m["id"] for m in mods})
+    assert [m["name"] for m in out] == ["Platform", "Core", "Mid", "App"]
+    assert [m["modernization"]["rank"] for m in out] == [1, 2, 3, 4]
+    assert out[0]["modernization"]["reason"].startswith("used by 3 other modules")
+    assert out[-1]["modernization"]["reason"].startswith("not used by any other module")
+>>>>>>> 5102ff85c956dfc79ccaa9dae343f1ed0c3ca560

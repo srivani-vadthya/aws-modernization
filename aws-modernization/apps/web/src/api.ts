@@ -98,6 +98,8 @@ export type ScopeModule = {
   metrics: { programs: number; tables: number; screens: number; files: number; useCases: number; loc: number; evidenceEdges: number };
   risk: string;
   riskScore?: number | null;
+  /** Suggested modernization order (1 = modernize first), derived from AKG/AST coupling evidence. */
+  modernization?: { rank: number; score: number; reason: string };
   coupling: string;
   cohesion?: number | null;
   boundary?: string | null;
