@@ -88,7 +88,21 @@ function Scope({ e, onChange }: { e: Engagement; onChange: (eng: Engagement) => 
   const [scopeAnalysisError, setScopeAnalysisError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [selectedCapId, setSelectedCapId] = useState<string | null>(null);
-  const candidates = scopeAnalysis?.logicalModules ?? [];
+  const candidates = (scopeAnalysis?.logicalModules ?? []).map((module: any) => ({
+    moduleId: module.moduleId || module.id || "unknown",
+    moduleName: module.moduleName || module.name || module.moduleId || "Unnamed module",
+    programs: Array.isArray(module.programs) ? module.programs : [],
+    tables: Array.isArray(module.tables) ? module.tables : [],
+    evidenceCount:
+      typeof module.evidenceEdgeCount === "number"
+        ? module.evidenceEdgeCount
+        : (Number(module.intraEdges) || 0) + (Number(module.crossEdges) || 0),
+    evidenceKinds: Array.isArray(module.evidenceKinds) ? module.evidenceKinds : ["AKG", "AST"],
+    ownedTables: Array.isArray(module.ownedTables) ? module.ownedTables : [],
+    sharedKernels: Array.isArray(module.sharedKernels) ? module.sharedKernels : [],
+    crossEdges: typeof module.crossEdges === "number" ? module.crossEdges : 0,
+    cohesionScore: typeof module.cohesionScore === "number" ? module.cohesionScore : 0,
+  }));
 
   useEffect(() => {
     let active = true;
@@ -201,13 +215,13 @@ function Scope({ e, onChange }: { e: Engagement; onChange: (eng: Engagement) => 
                         <span className="font-mono text-[10px] text-slate-500">{module.moduleId}</span>
                       </div>
                       <p className="mt-1 text-[10px] text-slate-600">
-                        {module.programs.length} code assets · {module.tables.length} tables · {module.evidenceEdgeCount} evidence relationships
+                        {module.programs.length} code assets · {module.tables.length} tables · {module.evidenceCount} evidence relationships
                       </p>
                       <p className="mt-1 text-[10px] text-slate-500">
-                        Evidence: {module.evidenceKinds.join(", ")} · Cohesion: {module.cohesionScore} · Cross-capability: {module.crossEdges}
+                        Evidence: {(module.evidenceKinds ?? []).join(", ") || "AKG + AST"} · Cohesion: {module.cohesionScore} · Cross-capability: {module.crossEdges}
                       </p>
                       <p className="mt-1 text-[10px] text-slate-500">
-                        Owned writes: {module.ownedTables.join(", ") || "none identified"} · Shared assets: {module.sharedKernels.join(", ") || "none identified"}
+                        Owned writes: {(module.ownedTables ?? []).join(", ") || "none identified"} · Shared assets: {(module.sharedKernels ?? []).join(", ") || "none identified"}
                       </p>
                     </button>
                   ))}

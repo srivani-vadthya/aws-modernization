@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import ado, aws_intake, bedrock_skills, ingest, knowledge_graph, pack, playwright_gen, store
+from . import ado, aws_intake, bedrock_skills, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, store, target_contract
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def get_engagement(eid: str):
         seed["collation_parity"] = bedrock_skills.simulate_ebcdic_collation_parity()
     if "cdc_status" not in seed:
         seed["cdc_status"] = bedrock_skills.get_bidirectional_cdc_status()
+    seed.setdefault("human_actions", human_actions.detect_human_actions(eng))
     return eng
 
 
@@ -356,10 +358,24 @@ def stage_aws_intake(eid: str):
 
 
 class TargetIn(BaseModel):
-    language: str
-    framework: str
-    data: str
-    architecture: str
+    language: str | None = None
+    framework: str | None = None
+    data: str | None = None
+    architecture: str | None = None
+    languageVersion: str | None = None
+    frameworkVersion: str | None = None
+    runtime: str | None = None
+    runtimeVersion: str | None = None
+    architectureStyle: str | None = None
+    serviceDecomposition: str | None = None
+    frontendRequirement: str | None = None
+    deploymentCloud: str | None = None
+    deploymentRegion: str | None = None
+    deploymentEnvironment: str | None = None
+    approved: bool = False
+    approvedBy: str | None = None
+    approvedAt: str | None = None
+    targetVersion: str | None = None
 
 
 @app.post("/api/engagements/{eid}/target")
@@ -369,12 +385,92 @@ def set_target_technology(eid: str, body: TargetIn):
         raise HTTPException(404, "Engagement not found")
     if not eng.get("seed"):
         raise HTTPException(400, "Engagement artifacts not initialized")
-    target = eng["seed"].setdefault("target", {})
-    target["language"] = body.language
-    target["framework"] = body.framework
-    target["data"] = body.data
-    target["architecture"] = body.architecture
-    return store.save(eng)
+    payload = body.model_dump(exclude_none=True)
+    try:
+        target = target_contract.validate_target_contract(payload, require_approval=False)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    target["approved"] = bool(body.approved)
+    target["approvedBy"] = body.approvedBy or target.get("approvedBy") or ("user" if body.approved else None)
+    target["approvedAt"] = body.approvedAt or (datetime.now(timezone.utc).isoformat() if body.approved else None)
+    target["approvalStatus"] = "APPROVED" if body.approved else (target.get("approvalStatus") or "DRAFT")
+    target["language"] = target_contract.normalize_target_contract(payload)["language"]
+    target["framework"] = target_contract.normalize_target_contract(payload)["framework"]
+    target["data"] = target_contract.normalize_target_contract(payload)["data"]
+    target["architecture"] = target_contract.normalize_target_contract(payload)["architecture"]
+    eng["seed"]["target"] = target
+    store.save(eng)
+    return {"ok": True, "target": target}
+
+
+class MigrationRunRequest(BaseModel):
+    scopeId: str | None = None
+    note: str | None = None
+    sourceDigest: str | None = None
+
+
+@app.post("/api/engagements/{eid}/migration-runs")
+def create_migration_run(eid: str, body: MigrationRunRequest | None = None):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    seed = eng.get("seed") or {}
+    target = seed.get("target") or {}
+    try:
+        target = target_contract.validate_target_contract(target, require_approval=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    scope = eng.get("scope") or {}
+    if not scope:
+        raise HTTPException(422, "A verified scope is required before a migration run can start.")
+    run = migration_runs.create_migration_run(eid, eng, target=target, scope=scope, note=(body.note if body else None))
+    eng.setdefault("migrationRuns", []).append(run)
+    store.save(eng)
+    return {"ok": True, "run": run}
+
+
+@app.get("/api/engagements/{eid}/migration-runs")
+def list_migration_runs(eid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return {"runs": migration_runs.list_migration_runs(eid)}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}")
+def get_migration_run(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    run = migration_runs.load_migration_run(eid, runId)
+    if not run:
+        raise HTTPException(404, "Migration run not found")
+    return {"ok": True, "run": run}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}/artifacts")
+def list_migration_run_artifacts(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    run = migration_runs.load_migration_run(eid, runId)
+    if not run:
+        raise HTTPException(404, "Migration run not found")
+    root = migration_runs.run_root(eid, runId)
+    files = [str(p.relative_to(root)) for p in sorted(root.rglob("*")) if p.is_file()]
+    return {"ok": True, "files": files, "manifest": run.get("artifacts", {}).get("manifest", [])}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}/human-actions")
+def get_migration_run_human_actions(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    root = migration_runs.run_root(eid, runId)
+    path = root / "human-actions.json"
+    if not path.exists():
+        return {"ok": True, "actions": [], "markdown": "# Human Action Required\n\nNo verified human actions found in checks executed.\n"}
+    return {"ok": True, "actions": json.loads(path.read_text(encoding="utf-8")), "markdown": (root / "HUMAN_ACTION_REQUIRED.md").read_text(encoding="utf-8") }
 
 
 class ClarificationAnswersIn(BaseModel):
@@ -849,8 +945,12 @@ def post_synthesize_codebase(eid: str):
         raise HTTPException(404, "Engagement not found")
     scope = eng.get("scope") or {}
     target_tech = (eng.get("seed") or {}).get("target", {})
-    files = bedrock_skills.synthesize_target_codebase(scope, target_tech)
-    return {"ok": True, "language": target_tech.get("language", "java"), "files": files}
+    try:
+        target = target_contract.validate_target_contract(target_tech, require_approval=True)
+        files = bedrock_skills.synthesize_target_codebase(scope, target)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "language": target.get("language", "unknown"), "target": target, "files": files}
 
 
 @app.get("/api/engagements/{eid}/terraform/azure")
@@ -880,9 +980,13 @@ def post_github_publish(eid: str, body: GitHubPublishIn):
 
     scope = eng.get("scope") or {}
     target_tech = (eng.get("seed") or {}).get("target", {})
+    try:
+        target = target_contract.validate_target_contract(target_tech, require_approval=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     
     # 1. Synthesize target service code
-    code_files = bedrock_skills.synthesize_target_codebase(scope, target_tech)
+    code_files = bedrock_skills.synthesize_target_codebase(scope, target)
 
     # 2. Generate Azure WebApps & PostgreSQL Terraform IaC
     tf_files = iac_generator.generate_azure_terraform(eng)
