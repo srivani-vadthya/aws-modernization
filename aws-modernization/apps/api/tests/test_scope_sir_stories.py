@@ -129,6 +129,15 @@ def test_scope_modules_llm_wording_is_cached_and_cannot_add_files(eng, monkeypat
     assert next(m for m in again["modules"] if m["id"] == "orders")["displayName"] == "Order Capture"
 
 
+def test_module_summary_prompt_includes_key_ast_conditions(eng, monkeypatch):
+    seen = []
+    monkeypatch.setattr(scope_modules, "ask_json", lambda system, user, **kw: (seen.append(user), (None, None))[1])
+    scope_modules.build_scope_modules(eng)
+    facts = json.loads(seen[0].split("FACTS:" + chr(10), 1)[1])
+    orders = next(m for m in facts if m["id"] == "orders")
+    assert any("model.Total > 500" in c for c in orders["useCases"][0]["keyConditions"])
+
+
 # ------------------------------------------------------------------ SIR
 
 def test_sir_scaffold_is_ast_anchored(eng):
