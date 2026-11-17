@@ -4,6 +4,7 @@ PHASES = [
     {"id": "graph", "label": "Knowledge graph", "group": "reverse"},
     {"id": "scope", "label": "Scope", "group": "reverse"},
     {"id": "semantic-ir", "label": "Semantic IR", "group": "reverse"},
+    {"id": "user-stories", "label": "User Story Generation", "group": "reverse"},
     {"id": "requirements", "label": "Requirements", "group": "forward"},
     {"id": "backlog", "label": "Backlog", "group": "forward"},
     {"id": "modernize", "label": "Technology", "group": "forward"},

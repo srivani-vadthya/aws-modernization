@@ -1,8 +1,10 @@
 import { useState, useEffect, Fragment, type ReactNode } from "react";
-import { api, type Engagement, type ScopeAnalysis } from "../api";
+import { api, type Engagement } from "../api";
 import { GraphView } from "./GraphView";
 import { DiscoveryReport } from "./DiscoveryReport";
 import { SemanticIRPanel } from "./SemanticIRPanel";
+import { ScopePanel } from "./ScopePanel";
+import { UserStoriesPanel } from "./UserStoriesPanel";
 import { Cpu, ShieldCheck, Server, Cloud, Zap } from "./Icons";
 
 
@@ -25,9 +27,11 @@ export function PhasePanels({
     case "graph":
       return <Graph e={engagement} />;
     case "scope":
-      return <Scope e={engagement} onChange={onChange} />;
+      return <ScopePanel e={engagement} onChange={onChange} />;
     case "semantic-ir":
-      return <SemanticIRPanel e={engagement} />;
+      return <SemanticIRPanel e={engagement} onChange={onChange} />;
+    case "user-stories":
+      return <UserStoriesPanel e={engagement} onChange={onChange} />;
     case "requirements":
       return <Requirements e={engagement} onChange={onChange} />;
 
@@ -78,169 +82,6 @@ function Graph({ e }: { e: Engagement }) {
           ? "CALLS / READS / WRITES / MAPS_TO from the curated GenApp overlay plus live inventory."
           : "This is a path-and-file-type graph. Confirm relationships before using it as an implementation design."}
       </p>
-    </div>
-  );
-}
-
-function Scope({ e, onChange }: { e: Engagement; onChange: (eng: Engagement) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [scopeAnalysis, setScopeAnalysis] = useState<ScopeAnalysis | null>(null);
-  const [scopeAnalysisError, setScopeAnalysisError] = useState<string | null>(null);
-  const [selectionError, setSelectionError] = useState<string | null>(null);
-  const [selectedCapId, setSelectedCapId] = useState<string | null>(null);
-  const candidates = (scopeAnalysis?.logicalModules ?? []).map((module: any) => ({
-    moduleId: module.moduleId || module.id || "unknown",
-    moduleName: module.moduleName || module.name || module.moduleId || "Unnamed module",
-    programs: Array.isArray(module.programs) ? module.programs : [],
-    tables: Array.isArray(module.tables) ? module.tables : [],
-    evidenceCount:
-      typeof module.evidenceEdgeCount === "number"
-        ? module.evidenceEdgeCount
-        : (Number(module.intraEdges) || 0) + (Number(module.crossEdges) || 0),
-    evidenceKinds: Array.isArray(module.evidenceKinds) ? module.evidenceKinds : ["AKG", "AST"],
-    ownedTables: Array.isArray(module.ownedTables) ? module.ownedTables : [],
-    sharedKernels: Array.isArray(module.sharedKernels) ? module.sharedKernels : [],
-    crossEdges: typeof module.crossEdges === "number" ? module.crossEdges : 0,
-    cohesionScore: typeof module.cohesionScore === "number" ? module.cohesionScore : 0,
-  }));
-
-  useEffect(() => {
-    let active = true;
-    setScopeAnalysis(null);
-    setScopeAnalysisError(null);
-    setSelectedCapId(null);
-    api.scopeAnalysis(e.id)
-      .then((analysis) => {
-        if (!active) return;
-        setScopeAnalysis(analysis);
-        const activeScopeId = e.scope?.capabilityId;
-        setSelectedCapId(activeScopeId && analysis.logicalModules.some((module) => module.moduleId === activeScopeId)
-          ? activeScopeId
-          : null);
-      })
-      .catch((err: Error) => {
-        if (active) setScopeAnalysisError(err.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [e.id, e.scope?.capabilityId]);
-
-  async function pick(id: string) {
-    setBusy(true);
-    setSelectionError(null);
-    try {
-      const updated = await api.scope(e.id, id);
-      setSelectedCapId(id);
-      onChange(updated);
-    } catch (err) {
-      setSelectionError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-        <h3 className="text-sm font-bold text-blue-950">Select a scope from graph evidence</h3>
-        <p className="mt-1 text-xs leading-relaxed text-blue-900">
-          Scope candidates are shown only when the AST/AKG contains operational relationships such as calls, reads, writes, or event flows. Structural file membership alone is not sufficient evidence.
-        </p>
-        {scopeAnalysisError && (
-          <p role="alert" className="mt-2 text-xs text-red-700">Scope evidence could not be loaded: {scopeAnalysisError}</p>
-        )}
-        {selectionError && (
-          <p role="alert" className="mt-2 text-xs text-red-700">Scope selection failed: {selectionError}</p>
-        )}
-      </section>
-
-      {scopeAnalysis && (
-        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">AST/AKG flow and module evidence</h3>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {scopeAnalysis.basis}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
-              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{scopeAnalysis.summary.totalUseCaseFlows} candidate flows</span>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">{scopeAnalysis.summary.mutatingFlows} mutating</span>
-              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">{scopeAnalysis.summary.sharedKernelCount} shared assets</span>
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div>
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Entry points to data sinks</h4>
-              {scopeAnalysis.useCaseFlows.length > 0 ? (
-                <div className="max-h-80 space-y-2 overflow-auto">
-                  {scopeAnalysis.useCaseFlows.map((flow) => (
-                    <article key={flow.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <h5 className="text-xs font-semibold text-slate-900">{flow.candidateUseCaseName}</h5>
-                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${flow.isMutation ? "bg-amber-100 text-amber-800" : "bg-sky-100 text-sky-800"}`}>
-                          {flow.isMutation ? "Mutates data" : "Read only"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        {flow.entryType} entry: <span className="font-mono">{flow.entryPoint}</span>
-                        {flow.callChain.length > 0 && <> · Calls: <span className="font-mono">{flow.callChain.join(" → ")}</span></>}
-                      </p>
-                      <p className="mt-1 text-[10px] text-slate-600">Transaction data: {flow.transactionBoundary.join(", ") || "none detected"}</p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">Reads: {flow.tablesRead.join(", ") || "none"} · Writes: {flow.tablesWritten.join(", ") || "none"}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">No entry-to-data-sink flows were extracted from the available graph relationships.</p>
-              )}
-            </div>
-
-            <div>
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Evidence-backed scope candidates</h4>
-              {candidates.length > 0 ? (
-                <div className="max-h-80 space-y-2 overflow-auto">
-                  {candidates.map((module) => (
-                    <button
-                      key={module.moduleId}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void pick(module.moduleId)}
-                      className={`w-full rounded-lg border p-3 text-left transition disabled:cursor-wait disabled:opacity-60 ${selectedCapId === module.moduleId ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"}`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-slate-900">{module.moduleName}</span>
-                        <span className="font-mono text-[10px] text-slate-500">{module.moduleId}</span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-slate-600">
-                        {module.programs.length} code assets · {module.tables.length} tables · {module.evidenceCount} evidence relationships
-                      </p>
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        Evidence: {(module.evidenceKinds ?? []).join(", ") || "AKG + AST"} · Cohesion: {module.cohesionScore} · Cross-capability: {module.crossEdges}
-                      </p>
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        Owned writes: {(module.ownedTables ?? []).join(", ") || "none identified"} · Shared assets: {(module.sharedKernels ?? []).join(", ") || "none identified"}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-                  No scope candidates meet the graph-evidence requirements. Add or extract operational AST/AKG relationships; no demo scopes are substituted.
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {e.scope && selectedCapId && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-          Selected scope: <strong>{e.scope.name}</strong> ({e.scope.metrics.programs} graph-linked code assets, {e.scope.metrics.tables} graph-linked tables).
-        </div>
-      )}
     </div>
   );
 }
