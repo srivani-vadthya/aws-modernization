@@ -196,18 +196,47 @@ def _digest(modules: list[dict]) -> str:
 _SYSTEM = (
     "You are a business analyst describing parts of a legacy application for a modernization team. "
     "You receive, per module, FACTS extracted from the application's AST and knowledge graph: entities, "
-    "entry points, data read/written, coupling. Describe what the module does for the business in plain "
-    "language. Use ONLY the supplied facts: never invent entities, screens, rules or numbers. If the facts are "
+    "entry points, data read/written, key conditions from the code, coupling. Describe what the module does for the business in plain "
+    "language. Where a use case has keyConditions (validation or branching found in its code), reflect them in the "
+    "description as business rules. Use ONLY the supplied facts: never invent entities, screens, rules or numbers. If the facts are "
     "too thin to say something, say so briefly instead of guessing. Reply with JSON only."
 )
 
 
-def _enrich_chunk(chunk: list[dict]) -> tuple[dict[str, dict], str | None]:
+_LOGIC_PER_USE_CASE = 2    # key branch/validation conditions shown to the LLM per use case
+
+
+def _key_logic(eng: dict, modules: list[dict]) -> dict[str, dict[int, list[str]]]:
+    """module id -> {use-case ref -> key AST conditions (if/throw/validation lines of the entry method)}."""
+    from . import sir_generator, store  # local import: sir_generator imports this module
+    seed = eng.get("seed") or {}
+    wf_by_id = {w["id"]: w for w in (seed.get("dotnet_akg") or {}).get("codeWorkflows", [])}
+    if not wf_by_id:
+        return {}
+    src = sir_generator._Source(store.engagement_dir(eng["id"]) / "source")
+    flows = flows_by_module(seed)
+    out: dict[str, dict[int, list[str]]] = {}
+    for m in modules:
+        for ref, flow in enumerate(flows.get(m["id"], [])[:_USE_CASES_SENT]):
+            wf = wf_by_id.get(flow["id"].removeprefix("UC:"))
+            try:
+                rules, _ = sir_generator._branch_rules("", 0, flow, wf, src)
+            except Exception:  # unreadable/odd source must never block the module cards
+                continue
+            conds = [r["statement"].removeprefix("Branches on: ") for r in rules[:_LOGIC_PER_USE_CASE]]
+            if conds:
+                out.setdefault(m["id"], {})[ref] = conds
+    return out
+
+
+def _enrich_chunk(chunk: list[dict], logic: dict[str, dict[int, list[str]]] | None = None) -> tuple[dict[str, dict], str | None]:
+    logic = logic or {}
     facts = [{"id": m["id"], "name": m["name"], "entities": m["ownedTables"], "tables": m["metrics"]["tables"],
               "codeAssets": m["metrics"]["programs"], "screens": m["metrics"]["screens"],
               "dependsOn": m["dependsOn"], "sharedAssets": m["sharedKernels"],
               "useCases": [{"ref": i, "entry": u["entry"], "mutates": u["mutates"], "reads": u["reads"],
-                            "writes": u["writes"], "externals": u["externals"]}
+                            "writes": u["writes"], "externals": u["externals"],
+                            "keyConditions": logic.get(m["id"], {}).get(i, [])}
                            for i, u in enumerate(m["useCases"][:_USE_CASES_SENT])]} for m in chunk]
     user = (
         "For every module return an object in a JSON array:\n"
@@ -263,9 +292,10 @@ def build_scope_modules(eng: dict, *, use_llm: bool = True, refresh: bool = Fals
     wording: dict[str, dict] = {}
     if use_llm and modules:
         models, failed = set(), 0
+        logic = _key_logic(eng, modules)
         for i in range(0, len(modules), _ENRICH_CHUNK):
             chunk = modules[i:i + _ENRICH_CHUNK]
-            got, model = _enrich_chunk(chunk)
+            got, model = _enrich_chunk(chunk, logic)
             if got:
                 wording.update(got)
                 _apply_enrichment(chunk, got)
