@@ -110,10 +110,11 @@ type Report = {
 
 const tabs = [
     ['overview', 'Overview'],
+    // ['modules', 'Modules'],
     ['dependencies', 'Dependencies'],
     ['integrations', 'Integrations'],
     ['findings', 'Findings'],
-    ['akg', 'Knowledge Graph'],
+    // ['akg', 'Knowledge Graph'],
     ['telemetry', 'AIOps Telemetry'],
 ] as const;
 type Tab = (typeof tabs)[number][0];
