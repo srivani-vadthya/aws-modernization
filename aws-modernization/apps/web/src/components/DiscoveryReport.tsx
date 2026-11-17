@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AppliedKnowledgeGraph } from "./AppliedKnowledgeGraph";
+// Knowledge Graph tab temporarily disabled (not deleted). Re-enable together with the tab entry and render line below.
+// import { AppliedKnowledgeGraph } from "./AppliedKnowledgeGraph";
 
 type Evidence = { id: string; path: string; line: number; kind: string; value: string };
 type Finding = { title: string; status: string; evidenceIds: string[] };
@@ -26,7 +27,7 @@ type Report = {
 };
 const tabs = [
   ["overview", "Overview"], ["modules", "Modules"], ["dependencies", "Dependencies"],
-  ["integrations", "Integrations"], ["findings", "Findings"], ["akg", "Knowledge Graph"], ["telemetry", "AIOps Telemetry"],
+  ["integrations", "Integrations"], ["findings", "Findings"], /* ["akg", "Knowledge Graph"], */ ["telemetry", "AIOps Telemetry"],
 ] as const;
 type Tab = typeof tabs[number][0];
 const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50";
@@ -154,7 +155,7 @@ export function DiscoveryReport({ engagementId }: { engagementId: string }) {
         {tab === "dependencies" && <><p className="text-xs text-slate-500">Declared versions only. Security, license and lifecycle checks have not been performed.</p><Table headers={["Library", "Version", "Ecosystem", "License", "Security / EOL", "Evidence"]} rows={report.dependencies.filter(d => matches(d.name)).map(d => [<strong>{d.name}</strong>, d.version, d.ecosystem, d.license, d.status, evidence(d.evidenceIds)])} /></>}
         {tab === "integrations" && <><p className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">Repeated matches are grouped by API family and owning project. These groups are not verified external systems; expand evidence to see every reference.</p><Table headers={["Reference group", "Project", "References", "Files", "Basis", "Evidence"]} rows={report.integrationGroups.filter(i => matches(i.name + i.project)).map(i => [i.name, i.project, i.referenceCount, i.paths.length, i.groupingBasis, evidence(i.evidenceIds)])} /></>}
         {tab === "findings" && <><p className="text-xs text-slate-500">AI findings cite known evidence IDs, but their interpretation still requires human review. Source comments are inputs, not verified facts.</p><Table headers={["Finding", "Basis", "Evidence"]} rows={findings.filter(f => matches(f.title)).map(f => [f.title, <span className={f.status === "Observed" ? "text-emerald-700" : "text-amber-800"}>{f.status}</span>, evidence(f.evidenceIds)])} /></>}
-        {tab === "akg" && <AppliedKnowledgeGraph engagementId={engagementId} />}
+        {/* {tab === "akg" && <AppliedKnowledgeGraph engagementId={engagementId} />} */}
         {tab === "telemetry" && <>
           <p className="text-xs text-slate-500">Only review attempts made by this discovery feature are recorded here. Tokens are returned by Bedrock; duration is measured locally. Cost is unavailable without verified pricing. Historical demo telemetry is excluded.</p>
           <Table headers={["Time", "Provider / model", "Result", "Input tokens", "Output tokens", "Duration", "Cost"]} rows={report.telemetry.map(t => [new Date(t.at).toLocaleString(), `${t.provider} / ${t.model}`, t.status, t.inputTokens ?? "Unavailable", t.outputTokens ?? "Unavailable", `${(t.durationMs / 1000).toFixed(2)} s`, "Not calculated"])} empty="No Bedrock discovery calls recorded. Run a Bedrock review to collect actual usage." />
