@@ -1662,21 +1662,7 @@ def generic_seed(inventory: dict, engagement_id: str, engagement_name: str) -> d
                 "note": f"Detected via AST {rel['kind']} relationship from member {rel['source']}.",
             })
 
-    if not detected_integrations:
-        detected_integrations = [
-            {
-                "id": "INT-DB2-REMOTE",
-                "name": "Relational Database Subsystem",
-                "kind": "database",
-                "protocol": "DRDA / SQL",
-                "direction": "both",
-                "inCodebase": False,
-                "evidence": traces[0] if traces else "APP01.cbl#L45",
-                "usedBy": [c["id"] for c in capabilities[:2]],
-                "note": "Production database subsystem referenced by business operations.",
-            }
-        ]
-
+    # No placeholder integration: an integration is listed only when a relationship fact found it.
     discovery["integrations"] = detected_integrations
 
     semantic_ir = [
@@ -1706,9 +1692,11 @@ def generic_seed(inventory: dict, engagement_id: str, engagement_name: str) -> d
                     "snippet": "EXEC SQL UPDATE TABLE SET STATUS = 'ACTIVE' END-EXEC",
                 },
             ],
-            "stateMachine": "INIT -> VALIDATED -> COMMITTED -> NOTIFIED",
-            "sideEffects": ["Persist state to Aurora PostgreSQL", "Publish DomainEvent to Amazon EventBridge"],
-            "integrations": [detected_integrations[0]["id"]],
+            "stateMachine": "INIT -> VALIDATED -> COMMITTED",
+            # Side effects are target-architecture intent, not observed behaviour; event publication
+            # is only modelled when the source calls a real publisher (EMITS_EVENT edge).
+            "sideEffects": ["Persist state to Aurora PostgreSQL"],
+            "integrations": [detected_integrations[0]["id"]] if detected_integrations else [],
         }
     ]
 
@@ -1937,23 +1925,8 @@ def generic_seed(inventory: dict, engagement_id: str, engagement_name: str) -> d
         "semantic_ir": semantic_ir,
         "clarifications": clarifications,
         "telemetry": telemetry,
-        "copybook_schemas": [
-            {
-                "id": "CPY-DSN1",
-                "sourceDataset": "SYS1.DB2.CUSTOMER",
-                "storageType": "Relational Table",
-                "recordLayout": "CUSTREC.cpy (01 CUSTOMER-RECORD)",
-                "targetTable": "customers",
-                "fields": [
-                    {"level": 5, "name": "CUST-ID", "picture": "X(36)", "usage": "DISPLAY", "dataType": "UUID", "sqlColumn": "id", "sqlType": "UUID PRIMARY KEY", "jpaAnnotation": "@Id"},
-                    {"level": 5, "name": "CUST-NAME", "picture": "X(60)", "usage": "DISPLAY", "dataType": "VARCHAR(60)", "sqlColumn": "full_name", "sqlType": "VARCHAR(60) NOT NULL", "jpaAnnotation": "@Column(name = \"full_name\")"},
-                    {"level": 5, "name": "CUST-BALANCE", "picture": "S9(9)V99", "usage": "COMP-3", "dataType": "DECIMAL(11,2)", "sqlColumn": "account_balance", "sqlType": "NUMERIC(11,2)", "jpaAnnotation": "@Column(precision = 11, scale = 2)"},
-                ],
-                "ddl": "CREATE TABLE customers (id UUID PRIMARY KEY, full_name VARCHAR(60) NOT NULL, account_balance NUMERIC(11,2));",
-                "jpaEntity": "@Entity @Table(name = \"customers\") public class CustomerEntity { @Id private UUID id; private String fullName; private BigDecimal accountBalance; }",
-                "dmsMapping": "{\"rules\": [{\"rule-type\": \"selection\", \"rule-id\": \"1\", \"object-locator\": {\"schema-name\": \"DB2\", \"table-name\": \"CUSTOMER\"}, \"rule-action\": \"include\"}]}"
-            }
-        ],
+        # Copybook lineage is only produced from copybooks found in the source tree; none are synthesised.
+        "copybook_schemas": [],
         "shadow_parity": shadow_parity,
         "wave_cutover": wave_cutover,
         "requirements": requirements,

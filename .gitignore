@@ -25,3 +25,5 @@ aws-modernization/apps/api/data/
 test-results/
 playwright-report/
 *.log
+
+aws-modernization/apps/scripts.zip

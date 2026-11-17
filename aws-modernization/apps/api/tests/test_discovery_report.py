@@ -129,7 +129,11 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(self.client.post(base+"/scope", json={"capabilityId": "policy"}).status_code, 200)
             response = self.client.post(base+"/gates/scope", json={"decision": "approved"})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["currentPhase"], "requirements")
+            self.assertEqual(response.json()["currentPhase"], "semantic-ir")
+            # The Semantic IR is generated and reviewed (not auto-approved), and stories/requirements stay locked.
+            self.assertIsNone(response.json()["gates"]["semantic-ir"]["decision"])
+            self.assertEqual(self.client.post(base+"/gates/semantic-ir", json={"decision": "approved"}).status_code, 400)
+            self.assertEqual(self.client.post(base+"/gates/requirements", json={"decision": "approved"}).status_code, 400)
 
     def test_missing_source_and_invalid_engagement_are_clear(self):
         self.assertEqual(self.client.get('/api/engagements/not-an-id/discovery-report').status_code, 404)

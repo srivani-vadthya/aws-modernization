@@ -76,13 +76,14 @@ export function EngagementPage() {
               {/* Cluster 1: Reverse Engineering */}
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block px-1 mb-1">
-                  1. Discovery &amp; Scope
+                  1. Discovery, Scope &amp; Stories
                 </span>
                 <ol className="space-y-1">
                   {[
                     { id: "discovery", label: "Discovery", step: "01", altId: "graph" },
                     { id: "scope", label: "Scope & Boundaries", step: "02" },
                     { id: "semantic-ir", label: "Semantic IR", step: "03" },
+                    { id: "user-stories", label: "User Story Generation", step: "04" },
                   ].map((item) => {
                     const g = eng.gates[item.id] || (item.altId ? eng.gates[item.altId] : undefined);
                     const isCurrent = phase === item.id || (item.altId && phase === item.altId);
@@ -123,8 +124,8 @@ export function EngagementPage() {
                 </span>
                 <ol className="space-y-1">
                   {[
-                    { id: "requirements", label: "Requirements & Backlog", step: "04", altId: "backlog" },
-                    { id: "modernize", label: "Target Architecture", step: "05" },
+                    { id: "requirements", label: "Requirements & Backlog", step: "05", altId: "backlog" },
+                    { id: "modernize", label: "Target Architecture", step: "06" },
                   ].map((item) => {
                     const g = eng.gates[item.id] || (item.altId ? eng.gates[item.altId] : undefined);
                     const isCurrent = phase === item.id || (item.altId && phase === item.altId);
@@ -165,9 +166,9 @@ export function EngagementPage() {
                 </span>
                 <ol className="space-y-1">
                   {[
-                    { id: "tests", label: "Tests & Parity", step: "06" },
-                    { id: "failures", label: "Failure Analysis", step: "07" },
-                    { id: "artifacts", label: "Final Artifacts", step: "08" },
+                    { id: "tests", label: "Tests & Parity", step: "07" },
+                    { id: "failures", label: "Failure Analysis", step: "08" },
+                    { id: "artifacts", label: "Final Artifacts", step: "09" },
                   ].map((item) => {
                     const g = eng.gates[item.id];
                     const isCurrent = phase === item.id;
@@ -260,7 +261,15 @@ export function EngagementPage() {
         <GateBar
           engagement={eng}
           phase={phase}
-          extraHint={phase === "scope" && !eng.scope ? "Select a business capability module before approving scope." : undefined}
+          extraHint={
+            phase === "scope" && !eng.scope
+              ? "Select a business capability module before approving scope."
+              : phase === "semantic-ir" && !(eng.seed?.semantic_ir ?? []).some((s) => s.module === eng.scope?.capabilityId)
+                ? "The Semantic IR must be generated for the selected scope before it can be approved."
+                : phase === "user-stories" && !eng.userStories
+                  ? "Generate the user stories before approving. Pushing to a tracker is optional."
+                  : undefined
+          }
           onDecide={async (decision, comment, actor) => {
             const next = await api.gate(eng.id, phase, decision, comment, actor);
             setEng(next);
