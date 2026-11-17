@@ -200,6 +200,11 @@ function EpicBlock({ epic }: { epic: Epic }) {
             <span className="font-bold">Business outcome:</span> {epic.businessOutcome}
           </p>
         )}
+        {epic.approach && (
+          <p className="mt-1.5 text-xs text-slate-600">
+            <span className="font-bold text-slate-700">Approach:</span> {epic.approach}
+          </p>
+        )}
       </div>
       <div className="space-y-3 p-4">
         {epic.features.map((f, i) => (
@@ -226,6 +231,34 @@ function FeatureBlock({ feature, defaultOpen }: { feature: Feature; defaultOpen:
         <p className="text-xs text-slate-600">{feature.description}</p>
         {feature.stateMachine && (
           <p className="break-words font-mono text-[10px] text-violet-700">{feature.stateMachine}</p>
+        )}
+        {feature.legacyAssessment && feature.legacyAssessment.factors.length > 0 && (
+          <details className="rounded-lg border border-amber-200 bg-amber-50/60">
+            <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-amber-900">
+              Legacy complexity: +{feature.legacyAssessment.uplift} pts · {feature.legacyAssessment.paradigm}
+            </summary>
+            <ul className="space-y-1 border-t border-amber-200 px-3 py-2 text-[11px] text-amber-900">
+              {feature.legacyAssessment.factors.map((f) => (
+                <li key={f.category + f.finding}>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase">{f.category}</span>{" "}
+                  {f.finding}
+                  {f.points > 0 && <span className="font-mono font-bold"> +{f.points}</span>}
+                  {f.evidence && <span className="ml-1 break-all font-mono text-[10px] text-amber-700">{f.evidence}</span>}
+                </li>
+              ))}
+              {feature.legacyAssessment.regressionScope.length > 0 && (
+                <li className="pt-1 font-semibold">Regression scope: {feature.legacyAssessment.regressionScope.join(", ")}</li>
+              )}
+            </ul>
+          </details>
+        )}
+        {feature.definitionOfDone && feature.definitionOfDone.length > 0 && (
+          <details className="rounded-lg border border-slate-200 bg-white">
+            <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-slate-600">Definition of done</summary>
+            <ul className="list-disc space-y-0.5 border-t border-slate-100 py-2 pl-7 pr-3 text-[11px] text-slate-600">
+              {feature.definitionOfDone.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+          </details>
         )}
         {feature.stories.map((s) => (
           <StoryRow key={s.id} story={s} />
@@ -258,6 +291,12 @@ function StoryRow({ story }: { story: Story }) {
             <span className="font-semibold">so that</span> {story.narrative.soThat}.
           </p>
           {story.description && <p className="text-slate-600">{story.description}</p>}
+          {story.estimation && story.estimation.uplift > 0 && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900">
+              <span className="font-bold">Estimate:</span> {story.estimation.base} base + {story.estimation.uplift} legacy complexity ={" "}
+              {story.estimation.points} pts. {story.estimation.factors.map((f) => f.finding).join("; ")}
+            </p>
+          )}
           <div>
             <h6 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Acceptance criteria</h6>
             <div className="space-y-1.5">

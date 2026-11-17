@@ -94,6 +94,11 @@ _REFINE_SYSTEM = (
     "- Stories are INVEST sized (Fibonacci 1,2,3,5,8; never more than 8).\n"
     "- NEVER change the meaning of a rule whose trustBoundary starts with 'Deterministic': keep its numbers, rounding, "
     "literals and conditions exactly as written.\n"
+    "- Each story carries an `estimation` computed from legacy-complexity evidence (coupling, data layer, "
+    "testability, integrations, security, unknowns). Keep its storyPoints at or above estimation.points; you may "
+    "raise them if the rule is harder than the evidence shows, never lower. Mention the main legacy risk of a story "
+    "in its description, and cover the adjacent workflows in `legacyAssessment.regressionScope` in the flow story's "
+    "scenarios.\n"
     "- NEVER invent behaviour. If a rule is ambiguous, garbled or truncated, add an openQuestion instead of guessing.\n"
     "Reply with JSON only."
 )
@@ -109,7 +114,7 @@ def _feature_view(epic: dict, feature: dict, sirs: dict[str, dict], subset: list
         stories.append({
             "id": s["id"], "type": s["type"], "title": s["title"], "narrative": s["narrative"],
             "description": s["description"], "acceptanceCriteria": s["acceptanceCriteria"],
-            "storyPoints": s["storyPoints"], "priority": s["priority"],
+            "storyPoints": s["storyPoints"], "priority": s["priority"], "estimation": s.get("estimation"),
             "rule": {"ruleId": rule.get("ruleId"), "statement": rule.get("statement"),
                      "classification": rule.get("classification"), "trustBoundary": rule.get("trustBoundary"),
                      "legacyLines": rule.get("legacyLines"), "snippet": (rule.get("snippet") or "")[:500]}
@@ -119,6 +124,8 @@ def _feature_view(epic: dict, feature: dict, sirs: dict[str, dict], subset: list
             "feature": {"id": feature["id"], "title": feature["title"], "summary": feature["description"],
                         "stateMachine": feature["stateMachine"], "sideEffects": feature["sideEffects"],
                         "inputs": feature["inputs"]},
+            "legacyAssessment": {k: (feature.get("legacyAssessment") or {}).get(k)
+                                 for k in ("paradigm", "factors", "regressionScope")},
             "stories": stories}
 
 
@@ -168,7 +175,8 @@ def _apply_story(story: dict, upd: dict, rule: dict | None) -> str | None:
         if lost:
             return f"deterministic-core rule: rewrite dropped literal(s) {lost}"
     story.update({k: candidate[k] for k in ("title", "narrative", "description", "acceptanceCriteria")})
-    story["storyPoints"] = bm.snap_points(upd.get("storyPoints", story["storyPoints"]))
+    floor = (story.get("estimation") or {}).get("points", 0)   # evidence-based minimum; the LLM cannot go below it
+    story["storyPoints"] = max(bm.snap_points(upd.get("storyPoints", story["storyPoints"])), floor)
     if upd.get("priority") in bm.PRIORITIES:
         story["priority"] = upd["priority"]
     labels = [x for x in (upd.get("labels") or []) if isinstance(x, str) and SAFE_LABEL.match(x)]

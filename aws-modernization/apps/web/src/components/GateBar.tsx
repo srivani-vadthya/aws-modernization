@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { api, type Engagement } from "../api";
-import { ClarificationModal } from "./ClarificationModal";
+import type { Engagement } from "../api";
 
 type Props = {
   engagement: Engagement;
@@ -15,20 +14,9 @@ export function GateBar({ engagement, phase, onDecide, onFeedback, extraHint }: 
   const [actor, setActor] = useState("lead-architect");
   const [busy, setBusy] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const gate = engagement.gates[phase];
   const lockedPrev = isLocked(engagement, phase);
-
-  const questions = engagement.seed?.clarifications?.[phase] || [];
-
-  async function handleApproveClick() {
-    if (questions.length > 0 && gate?.decision !== "approved") {
-      setShowModal(true);
-      return;
-    }
-    await go("approved");
-  }
 
   async function go(decision: "approved" | "rejected") {
     setBusy(true);
@@ -58,32 +46,8 @@ export function GateBar({ engagement, phase, onDecide, onFeedback, extraHint }: 
     }
   }
 
-  async function handleClarificationSubmit(answers: Record<string, string>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.clarifications(engagement.id, phase, answers);
-      await onDecide("approved", comment || "Approved with AI clarification decisions", actor);
-      setShowModal(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not approve this phase. Please retry.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <>
-      {showModal && (
-        <ClarificationModal
-          phase={phase}
-          questions={questions}
-          busy={busy}
-          error={error}
-          onCancel={() => setShowModal(false)}
-          onSubmit={handleClarificationSubmit}
-        />
-      )}
       <div className="sticky bottom-0 mt-8 rounded-xl border border-slate-200 bg-white/95 px-5 py-4 shadow-lg backdrop-blur">
         {error && <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {feedbackSuccess && (
@@ -138,14 +102,9 @@ export function GateBar({ engagement, phase, onDecide, onFeedback, extraHint }: 
           <button
             type="button"
             disabled={busy || lockedPrev || gate?.decision === "approved"}
-            onClick={() => void handleApproveClick()}
+            onClick={() => void go("approved")}
             className="relative rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-40 transition"
           >
-            {questions.length > 0 && gate?.decision !== "approved" && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[10px] font-black text-slate-900 ring-2 ring-white">
-                {questions.length}
-              </span>
-            )}
             Approve {phase.toUpperCase()}
           </button>
         </div>
@@ -154,8 +113,6 @@ export function GateBar({ engagement, phase, onDecide, onFeedback, extraHint }: 
             <span className="text-amber-800 font-medium">Complete and approve the prior phase before this gate can be unlocked.</span>
           ) : gate?.decision ? (
             <span className="text-emerald-700 font-semibold">Phase gate {gate.decision} by {gate.actor}.</span>
-          ) : questions.length > 0 ? (
-            <span className="text-blue-700 font-medium">Approving will present {questions.length} architectural decisions for human-in-the-loop review.</span>
           ) : (
             <span>{extraHint || "Every phase requires a human sign-off before downstream artifacts are frozen. You can also provide feedback to automatically re-route and regenerate upstream."}</span>
           )}

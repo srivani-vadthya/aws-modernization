@@ -128,6 +128,13 @@ export type Story = {
   priority: "Must" | "Should" | "Could" | "Won't";
   labels: string[];
   narrativeSource: "template" | "refined";
+  definitionOfDone?: string[];
+  estimation?: {
+    base: number;
+    uplift: number;
+    points: number;
+    factors: { category: string; finding: string; evidence: string; points: number }[];
+  };
   trustBoundary?: string;
   classification?: string;
   trace: { sirId: string; ruleId: string | null; ruleIds?: (string | null)[]; legacyLines: string; snippet: string; astNode: string };
@@ -141,6 +148,13 @@ export type Feature = {
   stateMachine: string;
   sideEffects: string[];
   narrativeSource: string;
+  definitionOfDone?: string[];
+  legacyAssessment?: {
+    paradigm: string;
+    uplift: number;
+    regressionScope: string[];
+    factors: { category: string; finding: string; evidence: string; points: number; question?: string }[];
+  } | null;
   stories: Story[];
 };
 
@@ -150,6 +164,8 @@ export type Epic = {
   module: string;
   description: string;
   businessOutcome: string;
+  approach?: string;
+  definitionOfDone?: string[];
   labels: string[];
   features: Feature[];
 };

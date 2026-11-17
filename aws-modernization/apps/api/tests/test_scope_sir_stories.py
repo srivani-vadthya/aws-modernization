@@ -458,3 +458,54 @@ def test_legacy_engagement_without_user_story_gate_is_backfilled(eng):
     store.save(legacy)
     got = TestClient(api_main.app).get(f"/api/engagements/{legacy['id']}").json()
     assert got["gates"]["user-stories"]["status"] == "pending"
+
+
+# ------------------------------------------------------------------ legacy complexity -> estimates
+
+class _FakeSrc:
+    def __init__(self, files): self.files = files
+    def lines(self, rel): return self.files.get(rel, [])
+
+
+def _assess(files, **flow_over):
+    from app import legacy_assessment as la
+    flow = {"id": "UC:W", "entryPoint": "A.B.Ctl.Run", "tablesRead": [], "tablesWritten": ["A.Order"],
+            "externals": [], **flow_over}
+    wf = {"steps": [{"from": "A.B.Ctl.Run", "kind": "CALLS", "to": "A.Svc.Do", "file": "c.cs", "line": 3, "depth": 1}],
+          "fullyTraced": True}
+    return la.assess(flow, wf, _FakeSrc(files), module_flows=[flow], kernel_nodes={"A.Order": 3}, node_cap={},
+                     cap_id="m", node_loc={}, externals={})
+
+
+def test_assessment_finds_evidence_and_ignores_modern_authorize():
+    code = ["public class Ctl {", "var u = HttpContext.Current.User;", "var s = new OrderService();",
+            "var cmd = new SqlCommand(sql, conn);", "[Authorize]", "// TODO fix"]
+    a = _assess({"c.cs": code})
+    cats = {f["category"] for f in a["factors"]}
+    assert {"testability", "data", "unknowns"} <= cats
+    assert "security" not in cats, "[Authorize] alone is not a legacy security risk"
+    sql = next(f for f in a["factors"] if "ADO.NET" in f["finding"])
+    assert sql["evidence"] == "c.cs#L4" and sql.get("question")
+    assert 0 < a["uplift"] <= 3
+    assert any("DBA" in d for d in a["definitionOfDone"])
+
+
+def test_estimates_use_uplift_and_llm_cannot_go_below_it(eng, monkeypatch):
+    eng = _with_sir(eng)
+    sir = eng["seed"]["semantic_ir"][0]
+    sir["legacyAssessment"] = {"paradigm": "MVC", "uplift": 3, "regressionScope": ["Orders: Edit"],
+                               "definitionOfDone": ["dod"], "factors": [
+                                   {"category": "data", "finding": "Raw SQL", "evidence": "c.cs#L1", "points": 3,
+                                    "question": "Which stored procedures does this use?"}]}
+    backlog = user_stories.sts.build_backlog([sir])
+    stories = {s["id"]: s for _, _, s in user_stories.bm.iter_stories(backlog)}
+    flow = next(s for s in stories.values() if s["type"] == "flow")
+    assert flow["estimation"] == {**flow["estimation"], "base": 5, "uplift": 3, "points": 8}
+    assert "legacy-risk" in flow["labels"] and flow["definitionOfDone"] == ["dod"]
+    assert any("Adjacent workflows" in a for a in flow["acceptanceCriteria"])
+    assert [q["question"] for q in backlog["openQuestions"]] == ["Which stored procedures does this use?"]
+    assert backlog["epics"][0]["approach"].startswith("Parity-first")
+    assert not [i for i in user_stories.bm.validate(backlog) if i[0] == "ERROR"]
+    upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
+           "acceptanceCriteria": ["Scenario: x"], "storyPoints": 1}
+    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == 8

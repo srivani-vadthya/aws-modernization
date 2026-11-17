@@ -75,6 +75,14 @@ Guidance for the rewrite:
   instead of guessing. Examples: a field named `NOT`, a snippet that stops at `USING`, or a state called
   `COMM_STUB_CALED`.
 
+### Estimating legacy work
+If a SIR contract carries `legacyAssessment` (the app attaches it from the AST/AKG: framework paradigm, coupling,
+data layer, testability, integrations, security, unknowns), the script adds its `uplift` to story points
+(`estimation` records base, uplift and the evidence), labels risky stories `legacy-risk`, adds a regression
+scenario for adjacent workflows and a Definition of Done to the flow story, and turns anything the code cannot
+answer into `Q-PLAN-nn` open questions. When rewriting stories, never lower `storyPoints` below `estimation.points`,
+and keep the epic's `approach` (parity-first surgical port vs. refactoring) explicit.
+
 ### 4. Validate and review with the user
 ```bash
 python .agents/skills/sir-user-story-generator/scripts/push_backlog.py validate backlog.json

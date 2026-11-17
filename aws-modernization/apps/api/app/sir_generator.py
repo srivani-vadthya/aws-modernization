@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import scope_modules, store
+from . import legacy_assessment, scope_modules, store
 from .llm_json import ask_json
 
 logger = logging.getLogger(__name__)
@@ -459,10 +459,18 @@ def build_contracts(eng: dict, cap_id: str, *, use_llm: bool = True, source_dir:
     flows = scope_modules.flows_by_module(seed).get(cap_id, [])
     flows = sorted(flows, key=lambda f: (not f["isMutation"], -len(f["transactionBoundary"]), f["id"]))[:MAX_CONTRACTS]
 
+    kernel_nodes = {k["nodeId"]: len(k.get("consumingCapabilities", [])) for k in applied.get("sharedKernels", [])}
+    node_cap = {n["id"]: n.get("capability") for n in nodes}
+    node_loc = {n["id"]: int(n.get("loc") or 0) for n in nodes}
+    module_flows = scope_modules.flows_by_module(seed).get(cap_id, [])
     drafts: list[dict] = []
     for flow in flows:
         wf = wf_by_id.get(flow["id"].removeprefix("UC:"))
-        drafts.append(_workflow_contract("", flow, wf, src, label, node_label))
+        draft = _workflow_contract("", flow, wf, src, label, node_label)
+        draft["legacyAssessment"] = legacy_assessment.assess(
+            flow, wf, src, module_flows=module_flows, kernel_nodes=kernel_nodes, node_cap=node_cap, cap_id=cap_id,
+            node_loc=node_loc, externals=node_label)
+        drafts.append(draft)
     basis = "use-case flows traced from entry points to data sinks"
     if not drafts:
         inv = scope_modules._inventory_index(eng)

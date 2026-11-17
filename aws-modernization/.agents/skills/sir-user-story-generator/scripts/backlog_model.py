@@ -155,16 +155,24 @@ def backlog_markdown(backlog: dict) -> str:
             lines += [f"**Business outcome:** {epic['businessOutcome']}", ""]
         if epic.get("description"):
             lines += [epic["description"], ""]
+        if epic.get("approach"):
+            lines += [f"**Approach:** {epic['approach']}", ""]
         for feature in epic.get("features", []):
             lines += [f"### Feature {feature['id']}: {feature['title']}", ""]
             if feature.get("description"):
                 lines += [feature["description"], ""]
+            if feature.get("definitionOfDone"):
+                lines += ["**Definition of done**", ""] + [f"- {d}" for d in feature["definitionOfDone"]] + [""]
             for s in feature.get("stories", []):
                 lines += [f"#### {s['id']}: {s['title']}",
                           f"*{s.get('type')} · {s.get('storyPoints')} pts · {s.get('priority')} · "
                           f"{s.get('narrativeSource')}*", "", _narrative(s), ""]
                 if s.get("description"):
                     lines += [s["description"], ""]
+                est = s.get("estimation")
+                if est and est.get("uplift"):
+                    why = "; ".join(f"{f['finding']} (+{f['points']})" for f in est["factors"])
+                    lines += [f"*Estimate: {est['base']} base + {est['uplift']} legacy complexity. {why}*", ""]
                 lines += ["**Acceptance criteria**", "", "```gherkin"]
                 for a in s.get("acceptanceCriteria", []):
                     lines += [a, ""]

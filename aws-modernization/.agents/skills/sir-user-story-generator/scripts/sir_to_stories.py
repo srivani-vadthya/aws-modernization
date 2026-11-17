@@ -65,6 +65,20 @@ def module_title(module: str) -> str:
     return str(module).replace("_", " ").replace("-", " ").title()
 
 
+def _estimate(story: dict, assessment: dict | None) -> dict:
+    """Apply the legacy-complexity uplift to a story's base points (Fibonacci, never above the 8-point cap)."""
+    base = story["storyPoints"]
+    a = assessment or {}
+    uplift = {"functional": a.get("uplift", 0) // 2, "flow": a.get("uplift", 0), "enabler": 0}[story["type"]]
+    factors = sorted((f for f in a.get("factors", []) if f.get("points")), key=lambda f: -f["points"])[:4]
+    story["storyPoints"] = bm.snap_points(base + uplift)
+    story["estimation"] = {"base": base, "uplift": uplift, "points": story["storyPoints"],
+                           "factors": [{k: f[k] for k in ("category", "finding", "evidence", "points")} for f in factors]}
+    if a.get("uplift", 0) >= 2 and story["type"] != "enabler":
+        story["labels"] = sorted(set(story.get("labels", [])) | {"legacy-risk"})
+    return story
+
+
 def _rule_story(sir: dict, rule: dict, n: int, persona: str) -> dict:
     core = _is_core(rule)
     statement = str(rule.get("statement", "")).strip()
@@ -112,6 +126,12 @@ def _flow_story(sir: dict, rules: list[dict], persona: str) -> dict:
                   "  When the results are inspected\n"
                   "  Then " + "; ".join(str(e).rstrip(".") for e in effects))
     first = rules[0] if rules else {}
+    a = sir.get("legacyAssessment") or {}
+    if a.get("regressionScope"):
+        ac.append("Scenario: Adjacent workflows are not regressed\n"
+                  f"  Given the workflows {', '.join(a['regressionScope'][:4])} share this data\n"
+                  "  When the modernized flow is deployed\n"
+                  "  Then their behaviour is unchanged")
     return {
         "id": f"US-{sir['id']}-FLOW",
         "type": "flow",
@@ -120,6 +140,7 @@ def _flow_story(sir: dict, rules: list[dict], persona: str) -> dict:
                       "soThat": "each step completes and its side effects are applied"},
         "description": sir.get("summary", ""),
         "acceptanceCriteria": ac,
+        "definitionOfDone": list(a.get("definitionOfDone", [])),
         "storyPoints": 5, "priority": "Must", "labels": ["flow"], "narrativeSource": "template",
         "trustBoundary": "", "classification": "State flow",
         "trace": {"sirId": sir["id"], "ruleId": None, "ruleIds": [r.get("ruleId") for r in rules],
@@ -158,11 +179,28 @@ def build_feature(sir: dict, persona: str) -> dict:
     stories.append(_flow_story(sir, rules, persona))
     if plumbing:
         stories.append(_enabler_story(sir, plumbing))
+    a = sir.get("legacyAssessment")
+    stories = [_estimate(s, a) for s in stories]
     return {
         "id": f"FT-{sir['id']}", "title": sir.get("name", sir["id"]), "description": sir.get("summary", ""),
         "sirId": sir["id"], "stateMachine": sir.get("stateMachine", ""), "sideEffects": list(sir.get("sideEffects", [])),
-        "inputs": list(sir.get("inputs", [])), "labels": [], "narrativeSource": "template", "stories": stories,
+        "inputs": list(sir.get("inputs", [])), "labels": [], "narrativeSource": "template",
+        "legacyAssessment": a, "definitionOfDone": list((a or {}).get("definitionOfDone", [])),
+        "stories": stories,
     }
+
+
+def planning_questions(backlog: dict) -> list[dict]:
+    """Things the code cannot answer (DB triggers, shared schemas, test environments, patch vs refactor...)."""
+    out, seen = [], set()
+    for _, feature in bm.iter_features(backlog):
+        flow_id = next((s["id"] for s in feature["stories"] if s["type"] == "flow"), None)
+        for f in (feature.get("legacyAssessment") or {}).get("factors", []):
+            q = f.get("question")
+            if q and q not in seen:
+                seen.add(q)
+                out.append({"id": f"Q-PLAN-{len(out) + 1:02d}", "storyId": flow_id, "question": q})
+    return out
 
 
 def build_backlog(sirs: list[dict], *, epic: str | None = None, persona: str | None = None,
@@ -184,11 +222,19 @@ def build_backlog(sirs: list[dict], *, epic: str | None = None, persona: str | N
             "id": f"EP-{bm.slug(key)}", "title": title, "module": key,
             "description": f"Modernized behaviour of the {title} capability, traced to {len(members)} SIR contract(s).",
             "businessOutcome": "", "labels": [bm.slug(key).lower()], "narrativeSource": "template",
+            "approach": ("Parity-first migration: a minimal surgical port of the traced behaviour. Refactoring "
+                         "(interfaces, breaking up classes, removing static state) is done only where an enabler "
+                         "story or a Definition-of-Done item calls for it."),
+            "definitionOfDone": ["Acceptance scenarios pass against the modernized service",
+                                 "Parity with the legacy behaviour is demonstrated on the same inputs",
+                                 "Open planning questions for the feature are answered or accepted as risks"],
             "features": [build_feature(s, default_persona) for s in members],
         })
-    return {"schemaVersion": bm.SCHEMA_VERSION, "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "source": {"sirIds": [s["id"] for s in selected], **(source or {})},
-            "epics": epics, "openQuestions": []}
+    backlog = {"schemaVersion": bm.SCHEMA_VERSION, "generatedAt": datetime.now(timezone.utc).isoformat(),
+               "source": {"sirIds": [s["id"] for s in selected], **(source or {})},
+               "epics": epics, "openQuestions": []}
+    backlog["openQuestions"] = planning_questions(backlog)
+    return backlog
 
 
 def main(argv: list[str] | None = None) -> int:
