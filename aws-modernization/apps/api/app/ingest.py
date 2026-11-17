@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import uuid
@@ -18,6 +19,16 @@ GENAPP_URL = "https://github.com/cicsdev/cics-genapp.git"
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _long_path(path: Path) -> str | Path:
+    """Prefix resolved paths with \\\\?\\ on Windows to bypass the 260-char MAX_PATH limit."""
+    if os.name == "nt":
+        resolved = str(path.resolve())
+        if not resolved.startswith("\\\\?\\"):
+            return "\\\\?\\" + resolved
+        return resolved
+    return path
 
 
 def _gates() -> dict:
@@ -85,13 +96,13 @@ def from_git(url: str, branch: str = "main", name: str | None = None, sample: bo
     eng = _new(name or url.rsplit("/", 1)[-1].removesuffix(".git"), "git" if not sample else "sample", url, branch)
     dest = store.engagement_dir(eng["id"]) / "source"
     if dest.exists():
-        shutil.rmtree(dest)
+        shutil.rmtree(_long_path(dest))
     cmd = ["git", "clone", "--depth", "1", "--branch", branch, url, str(dest)]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=180)
     except subprocess.CalledProcessError:
         if dest.exists():
-            shutil.rmtree(dest, ignore_errors=True)
+            shutil.rmtree(_long_path(dest), ignore_errors=True)
         retry = subprocess.run(
             ["git", "clone", "--depth", "1", url, str(dest)],
             capture_output=True,
@@ -114,7 +125,7 @@ def from_zip(upload_path: Path, filename: str) -> dict:
     dest = store.engagement_dir(eng["id"]) / "source"
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(upload_path, "r") as zf:
-        zf.extractall(dest)
+        zf.extractall(_long_path(dest))
     return _finalize(eng, dest, overlay_seed=False)
 
 
@@ -125,10 +136,10 @@ def from_folder(folder_path: Path, name: str | None = None) -> dict:
     eng = _new(eng_name, "folder")
     dest = store.engagement_dir(eng["id"]) / "source"
     if dest.exists():
-        shutil.rmtree(dest)
+        shutil.rmtree(_long_path(dest))
     shutil.copytree(
-        folder_path,
-        dest,
+        _long_path(folder_path),
+        _long_path(dest),
         ignore=shutil.ignore_patterns(".git", "node_modules", "bin", "obj", ".vs", "packages", "dist", "Scripts", "scripts", "Content", "content", "fonts", "Images", "images")
     )
     return _finalize(eng, dest, overlay_seed=False)

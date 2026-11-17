@@ -13,7 +13,10 @@ import logging
 import os
 from typing import Any, Literal
 
-import httpx
+try:
+    import httpx
+except Exception:  # pragma: no cover - optional dependency in offline/dev environments
+    httpx = None
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -105,7 +108,7 @@ class LLMGateway:
     ) -> str | None:
         """Invoke Amazon Bedrock via Direct API Key Bearer Token or Boto3 SDK."""
         # 1. Direct HTTP API Key Bearer Token
-        if self.bedrock_api_key:
+        if self.bedrock_api_key and httpx is not None:
             try:
                 url = f"https://bedrock-runtime.{self.region}.amazonaws.com/model/{model_id}/invoke"
                 headers = {

@@ -12,6 +12,7 @@ from app.bedrock_skills import (
     analyze_database_invariants,
     simulate_ebcdic_collation_parity,
     get_bidirectional_cdc_status,
+    generate_human_action_document,
 )
 
 
@@ -91,6 +92,45 @@ def test_ebcdic_collation_parity_simulator():
     coll_case = next(tc for tc in result["testCases"] if tc["id"] == "COLL-01")
     assert coll_case["flaggedDiscrepancy"] is True
     assert coll_case["legacyEbcdicOrder"] != coll_case["naiveAsciiOrder"]
+
+
+def test_generate_human_action_document_tracks_dependencies_and_reuse():
+    """Verify generated TODO docs include external dependency, duplication, and reusable-code actions."""
+    scope = {
+        "name": "Claims Modernization",
+        "sharedServices": [
+            {
+                "resourceName": "Payment Gateway",
+                "resourceId": "PAYGATE",
+                "consumers": ["Claims service", "Billing service"],
+            }
+        ],
+        "crossModuleDependencies": [
+            {
+                "component": "Customer Lookup",
+                "dependency": "External customer profile API",
+                "impact": "Potential duplicate customer matching logic across services",
+                "requiredHumanAction": "Create a shared customer profile facade and remove duplicate validation code",
+            }
+        ],
+        "duplicatePatterns": [
+            {
+                "component": "Policy Validation",
+                "issue": "Duplicate validation logic exists in claims and underwriting modules",
+                "action": "Centralize eligibility checks in a reusable domain service",
+            }
+        ],
+    }
+
+    result = generate_human_action_document(scope)
+    assert result["status"] == "DOCUMENTED"
+    assert result["totalOpenActions"] >= 3
+
+    actions = result["actions"]
+    assert any("third-party" in action["issue"].lower() or "external" in action["issue"].lower() for action in actions)
+    assert any("duplicate" in action["issue"].lower() or "duplication" in action["issue"].lower() for action in actions)
+    assert any("reusable" in action["requiredHumanAction"].lower() or "reuse" in action["requiredHumanAction"].lower() for action in actions)
+    assert any("tech debt" in action["impact"].lower() or "dependency" in action["impact"].lower() for action in actions)
 
 
 def test_bidirectional_cdc_status():

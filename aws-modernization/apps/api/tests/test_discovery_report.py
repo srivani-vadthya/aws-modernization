@@ -129,7 +129,7 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(self.client.post(base+"/scope", json={"capabilityId": "policy"}).status_code, 200)
             response = self.client.post(base+"/gates/scope", json={"decision": "approved"})
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["currentPhase"], "requirements")
+            self.assertEqual(response.json()["currentPhase"], "semantic-ir")
 
     def test_missing_source_and_invalid_engagement_are_clear(self):
         self.assertEqual(self.client.get('/api/engagements/not-an-id/discovery-report').status_code, 404)
@@ -183,7 +183,8 @@ class DiscoveryTests(unittest.TestCase):
         self.assertTrue(any(p.get("path") == "App/extra/detail.ts" for p in eng["seed"]["programs"]))
         node_ids = {n["id"] for n in eng["seed"]["graph"]["nodes"]}
         self.assertTrue(all(e["source"] in node_ids and e["target"] in node_ids for e in eng["seed"]["graph"]["edges"]))
-        self.assertEqual(eng["seed"]["semantic_ir"], [])
+        self.assertTrue(eng["seed"]["semantic_ir"])
+        self.assertTrue(any(sir.get("rules") for sir in eng["seed"]["semantic_ir"]))
         with patch.object(pack.playwright_gen, "generate_playwright_suite"), patch.object(pack.bedrock_skills, "generate_srs_markdown", return_value="Test"), patch.object(pack.bedrock_skills, "generate_c4_architecture_markdown", return_value="Test"):
             data = pack.build_pack(eng)
         with zipfile.ZipFile(BytesIO(data)) as z:
