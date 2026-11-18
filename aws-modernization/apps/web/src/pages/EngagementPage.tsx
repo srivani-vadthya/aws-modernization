@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 
-import {api, Engagement, PhaseMeta, type} from '../api';
+import {api, type Engagement, type PhaseMeta} from '../api';
 import {GateBar} from '../components/GateBar';
 import {PhasePanels} from '../components/PhasePanels';
 
