@@ -33,7 +33,18 @@ const ACTION_CLS: Record<string, string> = {
   failed: "bg-red-100 text-red-700",
 };
 
-export function TrackerIntegration({ engagementId, stories, onPushed }: { engagementId: string; stories: UserStoriesState; onPushed: () => void }) {
+export function TrackerIntegration({
+  engagementId,
+  stories,
+  onPushed,
+  only,
+}: {
+  engagementId: string;
+  stories: UserStoriesState;
+  onPushed: () => void;
+  /** Story ids ticked on their cards: push only these (with their epic and feature). Empty = everything. */
+  only?: string[];
+}) {
   const [providers, setProviders] = useState<TrackerProvider[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [active, setActive] = useState<string>("jira");
@@ -56,6 +67,9 @@ export function TrackerIntegration({ engagementId, stories, onPushed }: { engage
       .catch((err: Error) => setLoadError(err.message));
   }, []);
 
+  const selectionKey = (only ?? []).join(",");
+  useEffect(() => setReport(null), [selectionKey]);   // a dry run is only valid for the selection it was made with
+
   const provider = providers?.find((p) => p.id === active);
   const templateCount = stories.counts.template;
   const settings = (key: string) => config[active]?.[key] ?? provider?.settings[key] ?? "";
@@ -71,6 +85,7 @@ export function TrackerIntegration({ engagementId, stories, onPushed }: { engage
         provider: active,
         apply,
         confirm: apply && confirm,
+        only: only && only.length > 0 ? only : undefined,
         allowTemplate,
         config: effectiveConfig(),
         credentials: credentials(),
@@ -190,7 +205,9 @@ export function TrackerIntegration({ engagementId, stories, onPushed }: { engage
                 <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">What will be created</h4>
                   <p className="text-xs text-slate-600">
-                    {stories.counts.epics} epic · {stories.counts.features} feature{stories.counts.features !== 1 ? "s" : ""} · {stories.counts.stories} stories
+                    {only && only.length > 0
+                      ? `${only.length} selected stor${only.length === 1 ? "y" : "ies"}, with their epic and feature`
+                      : `${stories.counts.epics} epic · ${stories.counts.features} feature${stories.counts.features !== 1 ? "s" : ""} · ${stories.counts.stories} stories (tick story cards to push only those)`}
                     {active === "jira" && settings("featureMode") !== "epic" && " (features become labels on their stories)"}
                   </p>
                   {templateCount > 0 && (

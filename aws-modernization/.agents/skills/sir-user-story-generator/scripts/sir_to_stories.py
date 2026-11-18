@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the Epic > Feature > User Story scaffold from Semantic IR (SIR) contracts.
 
-The scaffold is mechanical on purpose: the business rules of one legacy method become one story (each rule an
-acceptance scenario), so nothing is dropped and a branch is never sized as a story of its own; every story
-carries a `trace` (all its `ruleIds`) back to the legacy lines. The wording is template text (`narrativeSource: "template"`)
-that the agent (or the app's LLM pass) then rewrites in business language, without touching the trace.
+One story per business use case (one SIR contract), grouped into features by business area and into epics by
+module. Every business rule of the use case is traced on the story (`trace.ruleIds`), so nothing is dropped. The
+wording is template text (`narrativeSource: "template"`) that states only what the SIR proves; the agent (or the
+app's LLM pass) then rewrites it in business language, without touching the trace.
 
 Usage:
     python sir_to_stories.py <input.json> --out backlog.json --markdown backlog.md \
@@ -18,11 +18,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import backlog_model as bm  # noqa: E402
+import checks_text as ct  # noqa: E402
 import estimation as est_mod  # noqa: E402
 
 
@@ -48,6 +50,49 @@ def _is_core(rule: dict) -> bool:
     return str(rule.get("trustBoundary", "")).startswith("Deterministic")
 
 
+# --------------------------------------------------------------------------- one use case = one story
+# Epic = module, Feature = business area (the part of the use-case name before ':', e.g. "Invoice" in
+# "Invoice: Post"), Story = one use case (one SIR contract). Every business rule of the use case is traced on the
+# story. Internal calls between pieces of code are technical: they get no acceptance criterion of their own and are
+# only cited in the "same result as today" criterion. A use case with nothing but internal calls (e.g. a class
+# that wires up repositories) is technical code, not a user story, and is left out. Legacy plumbing is left out too.
+#
+# The template states only what the SIR proves (records saved, notifications sent, information shown, quoted
+# status values). It never guesses what a code condition means: the LLM refinement (or a person) words those.
+
+rollup = est_mod.rollup
+DEFAULT_PERSONA = "business user"
+MAX_CRITERIA = 16       # a story with more than 8 is flagged for splitting by the validator
+_EMAIL = re.compile(r"smtp|e-?mail|mail", re.I)
+_SUFFIX = re.compile(r"(Client|Service|Api|Gateway|Proxy|Adapter)$")
+
+
+def _article(phrase: str) -> str:
+    """'an invoice', 'a policy', 'an SOA' (acronyms that start with a vowel sound take 'an')."""
+    first = phrase.split(" ", 1)[0]
+    vowel = first[:1].lower() in "aeiou" if not first.isupper() else first[:1] in "AEFHILMNORSX"
+    return f"{'an' if vowel else 'a'} {phrase}"
+
+
+def _plural(noun: str) -> str:
+    if noun.isupper():
+        return noun + "s"
+    if noun.endswith("y") and noun[-2:-1] not in "aeiou":
+        return noun[:-1] + "ies"
+    return noun + ("es" if noun.endswith(("s", "x", "ch", "sh")) else "s")
+
+
+def _human(identifier: str) -> str:
+    """'ParticularType' -> 'particular type'; short names are acronyms: 'Soa' -> 'SOA'."""
+    ident = str(identifier).strip()
+    return ident.upper() if len(ident) <= 3 else est_mod.words(ident)
+
+
+def _join(items: list[str]) -> str:
+    items = [i for i in items if i]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1] if items else ""
+
+
 def _first_upper(text: str) -> str:
     text = str(text).strip()
     return text[:1].upper() + text[1:]
@@ -55,230 +100,293 @@ def _first_upper(text: str) -> str:
 
 def _first_lower(text: str) -> str:
     text = str(text).strip().rstrip(".")
-    return text[:1].lower() + text[1:]
-
-
-def _title(statement: str, limit: int = 90) -> str:
-    t = _first_upper(str(statement).strip().rstrip("."))
-    return t if len(t) <= limit else t[: limit - 1].rstrip() + "…"
+    return text if text[:2].isupper() else text[:1].lower() + text[1:]
 
 
 def module_title(module: str) -> str:
     return str(module).replace("_", " ").replace("-", " ").title()
 
 
-# --------------------------------------------------------------------------- stories = pieces of behaviour
-# A branch is a decision point inside a behaviour, and a rule is a requirement of a behaviour: neither is a story.
-# A story is the behaviour of one legacy method (its rules become acceptance scenarios), sized by estimation.py
-# on Complexity, Amount of Work and Risk & Uncertainty relative to a reference story.
-
-OPS_PER_STORY = 6   # + 1 validation scenario + 1 parity scenario keeps a story at <= 8 acceptance scenarios
-AI_CAPABILITY = est_mod.AI_CAPABILITY
-DEFAULT_CAPABILITY = est_mod.DEFAULT_CAPABILITY
-MAX_EPIC_EFFICIENCY = est_mod.MAX_EPIC_EFFICIENCY
-rollup = est_mod.rollup
+def short_id(rule_id: str) -> str:
+    """'SIR-001.R12' -> 'R12' (a story only ever cites rules of its own use case)."""
+    return str(rule_id).rsplit(".", 1)[-1]
 
 
-def _behaviour_key(rule: dict) -> str:
-    """The legacy method a rule lives in: rules of one method are one piece of behaviour to build and test."""
-    node = str(rule.get("astNode") or "")
-    if node.count(":") >= 2:
-        return node.rsplit(":", 2)[0]
-    lines = str(rule.get("legacyLines") or "")
-    return lines.split("#", 1)[0] or str(rule.get("ruleId"))
+def cite(rule_ids: list) -> str:
+    """' (R1, R3-R6)': short ids with consecutive runs collapsed; empty when there is nothing to cite."""
+    ids = [short_id(r) for r in dict.fromkeys(rule_ids) if r]
+    nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(r"R(\d+)", i))]
+    if len(nums) != len(ids):        # ids that are not R<n>: list them as they are
+        return f" ({', '.join(ids)})" if ids else ""
+    nums, parts, start = sorted(set(nums)), [], None
+    for i, n in enumerate(nums):
+        start = n if start is None else start
+        if i + 1 == len(nums) or nums[i + 1] != n + 1:
+            parts.append(f"R{start}" if start == n else f"R{start}–R{n}")
+            start = None
+    return f" ({', '.join(parts)})" if parts else ""
 
 
-def _behaviour_name(key: str) -> str:
-    return key.split(":", 1)[-1].rsplit("/", 1)[-1] or key
+def story_title(narrative: dict) -> str:
+    """The story title is the user story itself: 'As a <role>, I want <goal> so that <benefit>'."""
+    return (f"As {_article(narrative['asA'].strip())}, I want {narrative['iWant'].strip().rstrip('.,')} "
+            f"so that {narrative['soThat'].strip().rstrip('.')}")
 
 
-def group_rules(rules: list[dict]) -> list[tuple[str, list[dict]]]:
-    """Rules grouped by legacy method (first-seen order). Branch/guard rules stay with the first part; the
-    operations are split into parts of OPS_PER_STORY so each story keeps <= 8 acceptance scenarios."""
-    groups: dict[str, list[dict]] = {}
-    for r in rules:
-        groups.setdefault(_behaviour_key(r), []).append(r)
+def area_and_action(sir: dict, fallback_area: str) -> tuple[str, str]:
+    """'Invoice: Change State' -> ('Invoice', 'Change State'); a name without ':' belongs to the module."""
+    name = str(sir.get("name") or sir.get("id"))
+    area, sep, action = name.partition(":")
+    return (area.strip(), action.strip()) if sep and area.strip() and action.strip() else (fallback_area, name)
+
+
+def _intent(action: str, noun: str, writes: bool) -> dict:
+    """What the user wants to do, worded from the use-case action (never from code). `noun` is the business entity.
+    Returns goal (after 'I want'), when (the trigger), context (what the criteria start from), mode
+    (create | update | view) and label (a business tag, never an HTTP verb or method name)."""
+    a = est_mod.words(action).replace("-", " ")
+    one, many = _article(noun), _plural(noun)
+
+    def it(goal, when, context, mode, label):
+        return {"goal": goal, "when": when, "context": context, "mode": mode, "label": label}
+
+    if a in ("create edit", "create or edit", "add edit", "edit create"):
+        return it(f"to open {one} to create or edit it", "the user opens the form", one, "view", "form")
+    if a in ("create", "post", "add", "new", "insert", "register"):
+        if writes:
+            return it(f"to create {one}", f"the {noun} is submitted", f"a new {noun}", "create", "create")
+        return it(f"to start creating {one}", "the user opens the form", f"a new {noun}", "view", "form")
+    if a in ("edit", "update", "patch", "put", "save", "modify"):
+        if writes:
+            return it(f"to update {one}", "the changes are saved", f"an existing {noun}", "update", "update")
+        return it(f"to open {one} for editing", f"the user opens the {noun}", f"an existing {noun}", "view", "form")
+    if a in ("delete", "remove", "cancel"):
+        done = "cancellation" if a == "cancel" else "deletion"
+        return it(f"to {a} {one}", f"the user confirms the {done}", f"an existing {noun}",
+                  "update" if writes else "view", a)
+    if a in ("details", "detail", "view", "get", "show", "display", "read"):
+        return it(f"to view the details of {one}", f"the user opens the {noun}", f"an existing {noun}", "view", "view")
+    if a in ("index", "list", "search", "browse", "all", "home"):
+        if noun.lower() == "dashboard":
+            return it("to see the dashboard", "the user opens the dashboard", "the dashboard", "view", "overview")
+        return it(f"to see the list of {many}", "the user opens the list", f"the {many}", "view", "list")
+    if a.startswith(("change state", "change status", "set status", "update status")) or a in ("state", "status"):
+        return it(f"to change the status of {one}", f"the user changes the status of the {noun}", f"an existing {noun}",
+                  "update" if writes else "view", "status-change")
+    if "pdf" in a.split() or a.startswith(("print", "export", "download", "generate")):
+        what = "a PDF" if "pdf" in a.split() else "a copy"
+        return it(f"to produce {what} of {one}", f"the user asks for {what}", f"an existing {noun}", "view",
+                  "pdf" if what == "a PDF" else "export")
+    return it(f"to carry out the \"{_first_upper(a)}\" step for {one}", "the user carries out the step", one,
+              "update" if writes else "view", bm.slug(a).lower())
+
+
+def _outside(rules: list[dict]) -> tuple[bool, list[str]]:
+    """(sends email?, other outside systems in business words)."""
+    names = list(dict.fromkeys(est_mod.entity(r) or "" for r in rules))
+    email = any(_EMAIL.search(n) for n in names)
+    others = [_human(_SUFFIX.sub("", n) or n) for n in names if n and not _EMAIL.search(n)]
+    return email, others
+
+
+def _records(entities: list[str]) -> str:
+    """'the invoice and particular records are' / 'the invoice record is'."""
+    return f"the {_join(entities)} record{'s are' if len(entities) > 1 else ' is'}"
+
+
+def adjacent_workflows(sir: dict) -> list[str]:
+    return [str(w) for w in ((sir.get("legacyAssessment") or {}).get("regressionScope") or [])][:4]
+
+
+def _new_and_existing(logic: list[dict]) -> bool:
+    """True when the use case handles both a new record (x.Id == 0) and an existing one (the else branch)."""
+    seen = {bool(p.get("negated")) for r in logic for p in r["logic"].get("when", [])
+            if re.search(r"\.Id\s*==\s*0$", str(p.get("code", "")))}
+    return seen == {True, False}
+
+
+def _logic_lines(logic: list[dict], sir: dict, noun: str, acronyms: set[str]) -> list[dict]:
+    """Each business decision in words: {'given': '...', 'then': '...', 'id': ruleId}."""
+    info = sir.get("businessLogic") or {}
+    ctx = ct.Ctx(noun, info.get("aliases"), info.get("helpers"), None, info.get("entry"), acronyms)
     out = []
-    for key, members in groups.items():
-        guards = [r for r in members if est_mod.is_branch(r)]
-        ops = [r for r in members if not est_mod.is_branch(r)]
-        chunks = [ops[i:i + OPS_PER_STORY] for i in range(0, len(ops), OPS_PER_STORY)] or [[]]
-        chunks[0] = guards + chunks[0]
-        for i, chunk in enumerate(chunks, 1):
-            out.append((_behaviour_name(key) + (f" (part {i} of {len(chunks)})" if len(chunks) > 1 else ""), chunk))
+    for r in logic:
+        ctx.method = r["logic"].get("method")
+        t = ct.logic_rule(r["logic"], ctx)
+        if t["then"]:
+            out.append({"given": " and ".join(t["given"]), "then": " and ".join(t["then"]), "id": r.get("ruleId")})
     return out
 
 
-def _behaviour_story(sir: dict, name: str, rules: list[dict], n: int, persona: str) -> dict:
-    """One story per piece of legacy behaviour; its guard conditions are one scenario, each operation another."""
-    guards = [r for r in rules if est_mod.is_branch(r)]
-    ops = [r for r in rules if not est_mod.is_branch(r)]
-    core = [r for r in rules if _is_core(r)]
-    first = (core or ops or rules)[0]
-    legacy = ", ".join(dict.fromkeys(str(r.get("legacyLines", "")) for r in rules if r.get("legacyLines")))
-    ac = []
-    if guards:
-        conds = [c for g in guards for c in est_mod.conditions(g)]
-        ac.append(f"Scenario: The request is validated before {name} runs\n"
-                  f"  Given the legacy validation rule(s) {', '.join(str(g.get('ruleId')) for g in guards)} apply\n"
-                  f"  When the modernized service receives the request\n"
-                  f"  Then it enforces the same conditions: " + "; ".join(conds))
-    ac += [(f"Scenario: {_title(r.get('statement', ''), 70)}\n"
-            f"  Given the legacy rule {r.get('ruleId')} applies\n"
-            f"  When the modernized service handles the request\n"
-            f"  Then the service applies: {str(r.get('statement', '')).strip().rstrip('.')}") for r in ops]
-    ac.append(f"Scenario: Parity with legacy behaviour of {name}\n"
-              f"  Given the same input is replayed against the legacy code and the modernized service\n"
-              f"  When both complete\n"
-              f"  Then the observable outcome is identical")
-    classes = list(dict.fromkeys(str(r.get("classification") or "business rule") for r in rules))
-    what = "; ".join(f"{r.get('ruleId')} {str(r.get('statement', '')).strip().rstrip('.')}" for r in rules)
+def build_story(sir: dict, area: str, action: str, persona: str, acronyms: set[str] | None = None) -> dict | None:
+    """One use case -> one user story, or None when the use case has no business behaviour (only internal calls)."""
+    business = [r for r in sir.get("rules", []) if not _is_plumbing(r)]
+    by_kind: dict[str, list[dict]] = {}
+    for r in business:
+        by_kind.setdefault(est_mod.rule_kind(r), []).append(r)
+    if not any(by_kind.get(k) for k in ("logic", "check", "write", "external", "read", "rule")):
+        return None
+    guards, writes = by_kind.get("check", []), by_kind.get("write", [])
+    externals, reads, other = by_kind.get("external", []), by_kind.get("read", []), by_kind.get("rule", [])
+    logic = by_kind.get("logic", [])
+    acts = [a for r in logic for a in r["logic"].get("then", [])]
+    logic_changes = any(a.get("type") in ("data", "set") for a in acts)
+
+    noun = _human(area)
+    it = _intent(action, noun, bool(writes) or logic_changes)
+    if it["mode"] == "create" and _new_and_existing(logic):   # one action that creates OR updates the record
+        it = {**it, "goal": f"to create or update {_article(noun)}", "context": _article(noun),
+              "label": "create-update"}
+    rules_in_words = _logic_lines(logic, sir, noun, acronyms or set()) if logic else []
+    decisions = est_mod.checks(business)
+    # every check spelled out in words, with what it does when the code says so ("the message ... is shown")
+    named = ct.checks([c for g in guards for c in est_mod.conditions(g)], noun)
+    guard_ids = cite([g.get("ruleId") for g in guards])
+    written = list(dict.fromkeys(_human(e) for r in writes if (e := est_mod.entity(r))))
+    shown = list(dict.fromkeys(_human(e) for r in reads if (e := est_mod.entity(r)) and not e.endswith(est_mod._LOOKUP)))
+    email, systems = _outside(externals)
+    changes = it["mode"] in ("create", "update") or bool(writes) or logic_changes
+    adjacent = adjacent_workflows(sir) if writes or logic_changes else []   # only a use case that changes records can break others
+    checked = f"{it['context']} that passes every check" if decisions and changes else it["context"]
+    given_when = f"Given {checked}, when {it['when']}"
+
+    # so that ...: the business benefit the SIR can prove
+    if writes:
+        benefit = f"{_records(written or [noun])} {'saved' if it['mode'] == 'create' else 'kept up to date'}"
+    elif shown or reads:
+        benefit = f"I can review the {_join(shown or [noun])} information"
+    else:
+        benefit = "the work is done the same way as today"
+    if email:
+        benefit += " and the right people are notified by email"
+    if systems:
+        benefit += f" and the {_join(systems)} system{'s are' if len(systems) > 1 else ' is'} kept informed"
+    narrative = {"asA": persona, "iWant": it["goal"], "soThat": benefit}
+
+    # acceptance criteria: one line each, 'Given ..., when ..., then ... (rule ids)'
+    ac: list[str] = []
+    data_in_logic = any(a.get("type") == "data" for a in acts)
+    notify_in_logic = any(a.get("type") == "notify" for a in acts)
+    if writes and not data_in_logic:     # the decision rules already say which records are added / updated
+        ac.append(f"{given_when}, then {_records(written or [noun])} saved{cite([r.get('ruleId') for r in writes])}")
+    if email and not notify_in_logic:
+        ac.append(f"{given_when}, then an email notification is sent"
+                  + cite([r.get("ruleId") for r in externals if _EMAIL.search(est_mod.entity(r) or "")]))
+    for system in systems:
+        ids = [r.get("ruleId") for r in externals if _human(_SUFFIX.sub("", est_mod.entity(r) or "") or "") == system]
+        ac.append(f"{given_when}, then the {system} system is updated{cite(ids)}")
+    rule_lines = [f"{given_when}, then {_first_lower(r.get('statement', ''))}{cite([r.get('ruleId')])}" for r in other]
+    if not writes and (shown or reads):
+        info = _join(shown or [noun])
+        start = f"there is {info} information" if it["context"].startswith("the ") else it["context"]
+        ac.append(f"Given {start}, when {it['when']}, then the {info} information is shown"
+                  + cite([r.get("ruleId") for r in reads]))
+    if adjacent:
+        ac.append(f"Given the {_join(adjacent)} workflow{'s' if len(adjacent) > 1 else ''} use the same records, "
+                  "when this change goes live, then they keep working unchanged")
+    parity = ("Given the same request is made in the current and the new system, when both complete, then the "
+              f"result is identical{cite([r.get('ruleId') for r in business])}")
+    # one criterion per business check, naming it; if they do not all fit, one line that lists every check
+    check_lines = [f"Given {c['text']}, when {it['when']}, then "
+                   f"{c['outcome'] or 'the outcome is the same as today'}{guard_ids}" for c in named]
+    room = MAX_CRITERIA - len(ac) - 1
+    if len(rule_lines) > max(1, room - min(len(check_lines), 1)):
+        rule_lines = [f"{given_when}, then these rules apply as today: "
+                      + "; ".join(_first_lower(r.get("statement", "")) for r in other)
+                      + cite([r.get("ruleId") for r in other])]
+    room = MAX_CRITERIA - len(ac) - len(rule_lines) - 1
+    if len(check_lines) > room:
+        check_lines = [f"Given {it['context']}, when {it['when']}, then these checks are applied exactly as today: "
+                       + "; ".join(c["text"] + (f" ({c['outcome']})" if c["outcome"] else "") for c in named)
+                       + guard_ids]
+    # one criterion per business decision read from the code: its conditions and exactly what happens
+    decision_lines = [f"Given {x['given'] or it['context']}, when {it['when']}, then {x['then']}{cite([x['id']])}"
+                      for x in rules_in_words]
+    room = MAX_CRITERIA - len(ac) - len(rule_lines) - len(check_lines) - 1
+    if len(decision_lines) > room:   # never dropped: the ones that do not fit share one line
+        keep, rest = decision_lines[:max(room - 1, 0)], rules_in_words[max(room - 1, 0):]
+        decision_lines = keep + [f"Given {_article(noun)}, when {it['when']}, then these rules also apply exactly as "
+                                 "today: " + "; ".join(f"if {x['given']}, {x['then']}" if x["given"] else x["then"]
+                                                       for x in rest) + cite([x["id"] for x in rest])]
+    ac = check_lines + decision_lines + ac + rule_lines + [parity]
+
+    # description: plain business sentences
+    desc = [f"The user can {it['goal'][3:]}."]
+    if rules_in_words:
+        desc.append("Business rules, exactly as today: " + "; ".join(
+            f"if {x['given']}, {x['then']}" if x["given"] else x["then"] for x in rules_in_words) + ".")
+    if named:
+        listed = "; ".join(c["text"] for c in named)
+        desc.append(f"Business checks, applied exactly as today: {listed}." if changes else
+                    f"What is shown depends on these checks, exactly as today: {listed}.")
+    if rules_in_words:
+        pass    # the rules above already say what is saved and who is notified
+    elif writes:
+        desc.append(f"{_first_upper(_records(written or [noun]))} saved"
+                    + (" and an email notification is sent." if email else "."))
+    elif email:
+        desc.append("An email notification is sent.")
+    elif shown or reads:
+        desc.append(f"It shows the {_join(shown or [noun])} information.")
+    if other:
+        desc.append("These rules must work exactly as today: "
+                    + "; ".join(_first_lower(r.get("statement", "")) for r in other) + ".")
+    if adjacent:
+        desc.append(f"Other workflows that use the same records ({_join(adjacent)}) must keep working.")
+
+    labels = [bm.slug(area).lower(), it["label"]]
+    labels += ["notification"] if email else []
+    labels += ["read-only"] if not writes and not externals and not logic_changes else []
+    first = (logic + writes + externals + other + guards + reads or business)[0]
+    legacy = ", ".join(dict.fromkeys(str(r.get("legacyLines", "")) for r in business if r.get("legacyLines")))
     return {
-        "id": f"US-{sir['id']}-{n:02d}",
+        "id": f"US-{sir['id']}",
         "type": "functional",
-        "title": (f"Preserve the behaviour of {name}" if len(ops) != 1 or guards
-                  else _title(ops[0].get("statement", ""))),
-        "narrative": {"asA": persona,
-                      "iWant": f"the modernized service to behave like the legacy {name}",
-                      "soThat": "the legacy behaviour is preserved exactly in the modernized service"},
-        "description": f"Legacy behaviour {name} ({', '.join(classes)}): {what}. Legacy lines: {legacy}.",
+        "title": story_title(narrative),
+        "narrative": narrative,
+        "description": " ".join(desc),
         "acceptanceCriteria": ac,
-        "storyPoints": 1,   # set by _estimate_feature
-        "priority": "Must" if core else "Should",
-        "labels": ["legacy-parity"] if core else [],
+        "storyPoints": 1,   # set below from the business-complexity estimate
+        "priority": "Must" if writes or externals or logic_changes else "Should",
+        "labels": list(dict.fromkeys(labels)),
         "narrativeSource": "template",
+        "behaviour": str(sir.get("name") or sir["id"]),
         "trustBoundary": first.get("trustBoundary", ""),
-        "classification": ", ".join(classes),
-        "trace": {"sirId": sir["id"], "ruleId": first.get("ruleId"), "ruleIds": [r.get("ruleId") for r in rules],
-                  "legacyLines": legacy, "snippet": "\n".join(str(r.get("snippet", "")) for r in rules)[:2000],
+        "classification": ", ".join(dict.fromkeys(str(r.get("classification") or "business rule") for r in business)),
+        "trace": {"sirId": sir["id"], "ruleId": first.get("ruleId"), "ruleIds": [r.get("ruleId") for r in business],
+                  "legacyLines": legacy, "snippet": "\n".join(str(r.get("snippet", "")) for r in business)[:2000],
                   "astNode": first.get("astNode", "")},
+        "estimation": None,
     }
 
 
-def _estimate_feature(sir: dict, stories: list[dict], rules_by_story: dict[str, list[dict]],
-                      team: dict | None, level: str) -> None:
-    a = sir.get("legacyAssessment")
-    for s in stories:
-        if s["type"] == "functional":
-            e = est_mod.score_behaviour(rules_by_story[s["id"]], a, team)
-        elif s["type"] == "flow":
-            e = est_mod.score_flow(sir, a, team)
-        else:
-            e = est_mod.score_enabler(rules_by_story[s["id"]], a, team)
-        e["legacyFactors"] = [{k: f[k] for k in ("category", "finding", "evidence", "points")}
-                              for f in sorted((f for f in (a or {}).get("factors", []) if f.get("points")),
-                                              key=lambda f: -f["points"])[:4]] if s["type"] != "enabler" else []
-        est_mod.ai_assist(e, level)
-        s["estimation"] = e
-        s["storyPoints"] = e["aiPoints"]
-        if e["risk"]["level"] >= 3 and s["type"] != "enabler":
-            s["labels"] = sorted(set(s.get("labels", [])) | {"legacy-risk"})
-
-
-def _flow_story(sir: dict, rules: list[dict], persona: str) -> dict:
-    states = [s.strip() for s in str(sir.get("stateMachine", "")).split("->") if s.strip()]
-    required = [i["name"] for i in sir.get("inputs", []) if i.get("required")]
-    effects = sir.get("sideEffects") or []
-    ac = [(f"Scenario: {sir['name']} completes its state flow\n"
-           f"  Given the request supplies {', '.join(required) or 'its inputs'}\n"
-           f"  When the process runs\n"
-           f"  Then it moves through {' → '.join(states) or 'its states in order'}")]
-    if effects:
-        ac.append("Scenario: Side effects are applied once the flow completes\n"
-                  "  Given the process has completed successfully\n"
-                  "  When the results are inspected\n"
-                  "  Then " + "; ".join(str(e).rstrip(".") for e in effects))
-    first = rules[0] if rules else {}
-    a = sir.get("legacyAssessment") or {}
-    if a.get("regressionScope"):
-        ac.append("Scenario: Adjacent workflows are not regressed\n"
-                  f"  Given the workflows {', '.join(a['regressionScope'][:4])} share this data\n"
-                  "  When the modernized flow is deployed\n"
-                  "  Then their behaviour is unchanged")
-    return {
-        "id": f"US-{sir['id']}-FLOW",
-        "type": "flow",
-        "title": f"Run {sir['name']} end to end",
-        "narrative": {"asA": persona, "iWant": f"{_first_lower(sir['name'])} to run through every step in order",
-                      "soThat": "each step completes and its side effects are applied"},
-        "description": sir.get("summary", ""),
-        "acceptanceCriteria": ac,
-        "definitionOfDone": list(a.get("definitionOfDone", [])),
-        "storyPoints": 1, "priority": "Must", "labels": ["flow"], "narrativeSource": "template",
-        "trustBoundary": "", "classification": "State flow",
-        "trace": {"sirId": sir["id"], "ruleId": None, "ruleIds": [r.get("ruleId") for r in rules],
-                  "legacyLines": first.get("legacyLines", ""), "snippet": "", "astNode": first.get("astNode", "")},
-    }
-
-
-def _enabler_story(sir: dict, plumbing: list[dict]) -> dict:
-    first = plumbing[0]
-    return {
-        "id": f"US-{sir['id']}-ENB",
-        "type": "enabler",
-        "title": f"Replace legacy plumbing in {sir['name']}",
-        "narrative": {"asA": "platform engineer",
-                      "iWant": f"the {len(plumbing)} legacy infrastructure call(s) replaced by cloud-framework equivalents",
-                      "soThat": "the business logic runs without the legacy runtime"},
-        "description": "Pruned plumbing: " + "; ".join(f"{r.get('ruleId')} {r.get('statement')}" for r in plumbing),
-        "acceptanceCriteria": [
-            "Scenario: Legacy plumbing is no longer required\n"
-            "  Given the modernized service is deployed\n"
-            "  When the flow runs\n"
-            "  Then none of the pruned legacy calls are executed and behaviour is unchanged"],
-        "storyPoints": 1, "priority": "Could", "labels": ["enabler"], "narrativeSource": "template",
-        "trustBoundary": first.get("trustBoundary", ""), "classification": "Legacy plumbing",
-        "trace": {"sirId": sir["id"], "ruleId": first.get("ruleId"), "ruleIds": [r.get("ruleId") for r in plumbing],
-                  "legacyLines": first.get("legacyLines", ""), "snippet": first.get("snippet", ""),
-                  "astNode": first.get("astNode", "")},
-    }
-
-
-def build_feature(sir: dict, persona: str, *, team: dict | None = None, level: str = DEFAULT_CAPABILITY) -> dict:
-    rules = sir.get("rules", [])
-    plumbing = [r for r in rules if _is_plumbing(r)]
-    business = [r for r in rules if not _is_plumbing(r)]
-    stories, rules_by_story = [], {}
-    for i, (name, chunk) in enumerate(group_rules(business), 1):
-        story = _behaviour_story(sir, name, chunk, i, persona)
-        stories.append(story)
-        rules_by_story[story["id"]] = chunk
-    stories.append(_flow_story(sir, rules, persona))
-    if plumbing:
-        stories.append(_enabler_story(sir, plumbing))
-        rules_by_story[stories[-1]["id"]] = plumbing
-    a = sir.get("legacyAssessment")
-    _estimate_feature(sir, stories, rules_by_story, team, level)
-    return {
-        "id": f"FT-{sir['id']}", "title": sir.get("name", sir["id"]), "description": sir.get("summary", ""),
-        "sirId": sir["id"], "stateMachine": sir.get("stateMachine", ""), "sideEffects": list(sir.get("sideEffects", [])),
-        "inputs": list(sir.get("inputs", [])), "labels": [], "narrativeSource": "template",
-        "legacyAssessment": a, "definitionOfDone": list((a or {}).get("definitionOfDone", [])),
-        "stories": stories,
-    }
-
-
-def planning_questions(backlog: dict) -> list[dict]:
-    """Things the code cannot answer (DB triggers, shared schemas, test environments, patch vs refactor...)."""
-    out, seen = [], set()
-    for _, feature in bm.iter_features(backlog):
-        flow_id = next((s["id"] for s in feature["stories"] if s["type"] == "flow"), None)
-        for f in (feature.get("legacyAssessment") or {}).get("factors", []):
-            q = f.get("question")
-            if q and q not in seen:
-                seen.add(q)
-                out.append({"id": f"Q-PLAN-{len(out) + 1:02d}", "storyId": flow_id, "question": q})
-    return out
+def build_features(members: list[dict], module_key: str, module_label: str, persona: str) -> list[dict]:
+    """Group the module's use cases into business-area features; one story per use case."""
+    areas: dict[str, dict] = {}
+    acronyms = {_human(area_and_action(s, module_label)[0]) for s in members}   # e.g. "SOA": keep its capitals
+    for sir in members:
+        area, action = area_and_action(sir, module_label)
+        story = build_story(sir, area, action, persona, acronyms)
+        if story is None:
+            continue
+        story["estimation"] = est_mod.score_use_case([r for r in sir.get("rules", []) if not _is_plumbing(r)],
+                                                     sir.get("legacyAssessment"))
+        story["storyPoints"] = story["estimation"]["points"]
+        feat = areas.setdefault(area, {
+            "id": f"FT-{bm.slug(module_key)}-{bm.slug(area)}", "title": _human(area) if len(area) <= 3 else area,
+            "description": "", "sirIds": [], "labels": [bm.slug(area).lower()], "narrativeSource": "template",
+            "stories": []})
+        feat["sirIds"].append(sir["id"])
+        feat["stories"].append(story)
+    for feat in areas.values():
+        goals = [s["narrative"]["iWant"][3:] for s in feat["stories"]]
+        feat["description"] = f"What a user can do here: {_join(goals)}."
+    return list(areas.values())
 
 
 def build_backlog(sirs: list[dict], *, epic: str | None = None, persona: str | None = None,
                   only: list[str] | None = None, module_names: dict[str, str] | None = None,
-                  source: dict | None = None, ai_capability: str | None = None,
-                  team: dict | None = None) -> dict:
-    level = str(ai_capability or "").upper()
-    assumed = level not in AI_CAPABILITY
-    if assumed:
-        level = DEFAULT_CAPABILITY
+                  source: dict | None = None) -> dict:
     wanted = set(only or [])
     selected = [s for s in sirs if not wanted or s.get("id") in wanted]
     if not selected:
@@ -290,59 +398,56 @@ def build_backlog(sirs: list[dict], *, epic: str | None = None, persona: str | N
     epics = []
     for key, members in groups.items():
         title = epic or module_names.get(key) or module_title(key)
-        default_persona = persona or f"{title.lower()} user"
+        features = build_features(members, key, title, persona or DEFAULT_PERSONA)
+        if not features:
+            continue
+        n = sum(len(f["stories"]) for f in features)
         epics.append({
             "id": f"EP-{bm.slug(key)}", "title": title, "module": key,
-            "description": f"Modernized behaviour of the {title} capability, traced to {len(members)} SIR contract(s).",
+            "description": f"The {title} business capability: {n} use case{'s' if n > 1 else ''} in "
+                           f"{len(features)} feature{'s' if len(features) > 1 else ''}.",
             "businessOutcome": "", "labels": [bm.slug(key).lower()], "narrativeSource": "template",
-            "approach": ("Parity-first migration: a minimal surgical port of the traced behaviour. Refactoring "
-                         "(interfaces, breaking up classes, removing static state) is done only where an enabler "
-                         "story or a Definition-of-Done item calls for it."),
-            "definitionOfDone": ["Acceptance scenarios pass against the modernized service",
-                                 "Parity with the legacy behaviour is demonstrated on the same inputs",
-                                 "Open planning questions for the feature are answered or accepted as risks"],
-            "features": [build_feature(s, default_persona, team=team, level=level) for s in members],
+            "features": features,
         })
+    if not epics:
+        raise ValueError("The selected contracts contain only technical code (internal calls and plumbing), so "
+                         "there is no business behaviour to write user stories for. Select a business module.")
     for e in epics:
-        if AI_CAPABILITY[level]:
-            est_mod.enforce_epic_cap([s for f in e["features"] for s in f["stories"]])
         for f in e["features"]:
             rollup(f, f["stories"])
         rollup(e, [s for f in e["features"] for s in f["stories"]])
     backlog = {"schemaVersion": bm.SCHEMA_VERSION, "generatedAt": datetime.now(timezone.utc).isoformat(),
                "source": {"sirIds": [s["id"] for s in selected], **(source or {})},
                "estimationModel": {
-                   "method": "Complexity + Amount of Work + Risk & Uncertainty (each 1-5), relative to a reference "
-                             "story, on Fibonacci 1, 2, 3, 5, 8, 13, 21",
+                   "method": "Business complexity only: Business rules + Process scope + Business uncertainty "
+                             "(each 1-5), relative to a reference story, on Fibonacci 1, 2, 3, 5, 8, 13, 21. "
+                             "Technical details are not considered.",
                    "scale": [{"factorSum": f"<= {lim}" if lim < 99 else "> 13.5", "points": p}
                              for lim, p in est_mod.SUM_TO_POINTS],
-                   "reference": dict(est_mod.REFERENCE),
-                   "capability": level, "multiplier": AI_CAPABILITY[level], "assumed": assumed,
-                   "team": dict(team or {}),
-                   "storyPointsMean": "AI-assisted points (estimation.aiPoints); estimation.humanPoints is the "
-                                      "manual baseline"},
+                   "reference": dict(est_mod.REFERENCE)},
                "epics": epics, "openQuestions": []}
-    backlog["openQuestions"] = planning_questions(backlog)
-    all_stories = [s for _, _, s in bm.iter_stories(backlog)]
-    ref = est_mod.pick_reference(all_stories)
+    # the same business action reached two ways (e.g. a screen and an API) reads as two identical stories
+    seen: dict[str, dict] = {}
+    for _, _, story in bm.iter_stories(backlog):
+        key = story["narrative"]["iWant"].lower()
+        if key in seen:
+            first = seen[key]
+            backlog["openQuestions"].append({
+                "id": f"Q-DUP-{len(backlog['openQuestions']) + 1:02d}", "storyId": story["id"],
+                "question": (f"\"{first['behaviour']}\" and \"{story['behaviour']}\" both let the user "
+                             f"{story['narrative']['iWant'][3:]}. Are they the same business action (one story), or do they differ for the "
+                             "business? If they are the same, remove one of the two stories.")})
+        else:
+            seen[key] = story
+    ref = est_mod.pick_reference([s for _, _, s in bm.iter_stories(backlog)])
     if ref:
-        ref["labels"] = sorted(set(ref.get("labels", [])) | {"reference-story"})
+        ref["labels"] = list(dict.fromkeys(ref.get("labels", []) + ["reference-story"]))
         backlog["estimationModel"]["reference"]["storyId"] = ref["id"]
         backlog["openQuestions"].append({
             "id": "Q-EST-02", "storyId": ref["id"],
-            "question": (f"Agree the reference story for relative sizing: {ref['id']} '{ref['title']}' is the closest "
-                         f"to the {est_mod.REFERENCE['points']}-point anchor ({est_mod.REFERENCE['description']}). "
+            "question": (f"Agree the reference story for relative sizing: \"{ref['title']}\" is the closest to the "
+                         f"{est_mod.REFERENCE['points']}-point anchor ({est_mod.REFERENCE['description']}). "
                          "Replace it with a story the team has already delivered if one is a better anchor.")})
-    if not team or any(team.get(k) is None for k in ("legacyStackFamiliar", "targetStackFamiliar", "builtSimilarBefore")):
-        backlog["openQuestions"].append({
-            "id": "Q-EST-03", "storyId": None,
-            "question": "Team context for the risk factor: does the team know the legacy stack, the target stack, "
-                        "and has it built something similar before? (Unknown answers add no risk; confirm them.)"})
-    if assumed:
-        backlog["openQuestions"].append({
-            "id": "Q-EST-01", "storyId": None,
-            "question": f"Confirm the team's AI capability level (assumed {level}: AI agent with SIR/AST context). "
-                        "L0 no AI tools, L1 autocomplete/chat only, L3 adds an automated parity harness."})
     return backlog
 
 
@@ -354,28 +459,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--epic", help="put every contract under one epic with this name")
     ap.add_argument("--persona")
     ap.add_argument("--only", nargs="*", help="only these SIR ids")
-    ap.add_argument("--ai-capability", choices=sorted(AI_CAPABILITY),
-                    help="team AI capability level for AI-assisted points (default L2, recorded as assumed)")
-    ap.add_argument("--team-knows-legacy", choices=("yes", "no"))
-    ap.add_argument("--team-knows-target", choices=("yes", "no"))
-    ap.add_argument("--team-built-similar", choices=("yes", "no"))
     args = ap.parse_args(argv)
-    yn = {"yes": True, "no": False, None: None}
-    team = {"legacyStackFamiliar": yn[args.team_knows_legacy], "targetStackFamiliar": yn[args.team_knows_target],
-            "builtSimilarBefore": yn[args.team_built_similar]}
     with open(args.input, encoding="utf-8") as fh:
         sirs = load_sirs(json.load(fh))
-    backlog = build_backlog(sirs, epic=args.epic, persona=args.persona, only=args.only,
-                            ai_capability=args.ai_capability, team=team)
+    backlog = build_backlog(sirs, epic=args.epic, persona=args.persona, only=args.only)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(backlog, fh, indent=2, ensure_ascii=False)
     if args.markdown:
         with open(args.markdown, "w", encoding="utf-8") as fh:
             fh.write(bm.backlog_markdown(backlog))
     c = bm.counts(backlog)
-    print(f"{c['epics']} epic(s), {c['features']} feature(s), {c['stories']} stories "
-          f"({c['storyPoints']} AI-assisted points, {c['humanPoints']} manual baseline, "
-          f"{round(c['aiEfficiency'] * 100)}% AI efficiency) -> {args.out}")
+    print(f"{c['epics']} epic(s), {c['features']} feature(s), {c['stories']} stories, "
+          f"{c['storyPoints']} story points -> {args.out}")
     return 0
 
 

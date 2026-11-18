@@ -23,10 +23,8 @@ business language, without changing any of the traced facts.
 | Backlog level | Comes from | Count |
 |---|---|---|
 | **Epic** `EP-<MODULE>` | SIR `module` (business capability), or `--epic` override | 1 per module |
-| **Feature** `FT-<SIR id>` | one SIR contract (`name`, `summary`, `stateMachine`, `sideEffects`, `inputs`) | 1 per SIR |
-| **Story** `US-<SIR>-NN` (functional) | one piece of business behaviour: the rules of one legacy method (grouped by `astNode`): one validation scenario for its conditions, one scenario per operation, all rules in `trace.ruleIds` | 1 per legacy method (split into parts of max 6 operations) |
-| **Story** `US-<SIR>-FLOW` (flow) | `stateMachine` transitions + `sideEffects` + required `inputs` | 1 per SIR |
-| **Story** `US-<SIR>-ENB` (enabler) | rules with `kind: legacy_plumbing_pruned` or classification containing "plumbing" | 0–1 per SIR |
+| **Feature** `FT-<MODULE>-<AREA>` | the business area: the part of the use-case name before `:` (`Invoice` in "Invoice: Post") | 1 per area |
+| **Story** `US-<SIR id>` | one business use case = one SIR contract. Internal calls between pieces of code get no criterion of their own; plumbing is left out; a contract with only internal calls (e.g. a class that wires up repositories) produces no story | 1 per SIR with business behaviour |
 
 ## Workflow
 
@@ -51,7 +49,7 @@ Edit `backlog.json`. For each story:
 
 **You may change** `title`, `narrative.asA/iWant/soThat`, `description` and the wording of
 `acceptanceCriteria`, `storyPoints` (Fibonacci, set by the rules in
-[3a](#3a-estimating-story-points-complexity-work-risk-and-human-vs-ai-capability)) and `priority`
+[3a](#3a-estimating-story-points-business-complexity-only)) and `priority`
 (Must/Should/Could/Won't). You may add labels and `epic.businessOutcome`. Set `narrativeSource` to
 `"refined"` once you have rewritten a story.
 
@@ -60,12 +58,20 @@ Guidance for the rewrite:
   `CALL 'CBLTDLI' USING DLI-GET-UNIQUE` means "retrieve the existing claim before deciding to insert or
   update it, so duplicates are never created". Only state a purpose that the SIR statement, summary or
   side effects support.
-- **Use real personas.** "As a claims adjuster" is better than "As a system". For technical enablers,
-  use "platform engineer".
-- **Make acceptance criteria concrete.** Use one Gherkin `Scenario` per string, with real values,
-  literals and error texts copied from the SIR, for example
-  `Then the response contains "ERROR: CLAIM RECORD FOR UPDATE NOT FOUND"`. Keep the parity scenario.
-- **A story is a behaviour, not a branch.** Never create one story per `if`/branch. Keep every rule of the story as a scenario (closely related rules may share one), and never drop a rule from `trace.ruleIds`.
+- **Use real personas.** "As a claims adjuster" is better than "As a system".
+- **Write the story as the user story.** The title is `As a <role>, I want <goal> so that <benefit>`,
+  built from `narrative.asA / iWant / soThat`. Add a 2-4 sentence business `description` and 2-5 short
+  lowercase `labels`.
+- **Make acceptance criteria concrete.** One line per criterion: `Given <context>, when <action>, then
+  <outcome> (<rule ids>)`, ending with the ids of the rules it covers, with real values, literals and
+  error texts copied from the SIR, for example `... then the response reads "ERROR: CLAIM RECORD FOR
+  UPDATE NOT FOUND" (R-004)`. Keep the criterion showing the outcome matches the current system.
+- **Write criteria in plain English.** A non-technical reader must understand each line at first read:
+  short sentences (under about 30 words), everyday words, active voice, one idea per line. Say "the
+  invoice is saved", not "the record is persisted"; "is empty", not "is null". No jargon, code terms,
+  status codes or field/table names. Simplify the wording only: keep the business intent and every
+  condition, number, quoted value and error text unchanged.
+- **A story is a use case, not a branch or a method.** Every rule id of the story must appear in at least one criterion, e.g. `(R2–R6)`; never drop a rule from `trace.ruleIds`.
 - **Follow INVEST.** If a story would be 13 or more points, split it into sibling stories (`US-…-03a`,
   `US-…-03b`) and copy the same `trace` onto each.
 
@@ -78,99 +84,72 @@ Guidance for the rewrite:
   instead of guessing. Examples: a field named `NOT`, a snippet that stops at `USING`, or a state called
   `COMM_STUB_CALED`.
 
-### 3a. Estimating story points (Complexity, Work, Risk, and human vs AI capability)
+### 3a. Estimating story points (business complexity only)
+
+**Technical details are not considered.** Story points measure how complex the *business* ask is, not how
+hard the code is to change. Classes, frameworks, coupling, stored procedures, test tooling, the team's
+stack familiarity and AI tooling do not raise or lower a story's size.
 
 **What not to do.** Do not turn every branch into a rule, and do not turn every rule into a story. Do not
-give a story a fixed 3 or 5 points. Those three habits are why the Invoice module came out at **455 points
-in 121 stories**.
+give a story a fixed 3 or 5 points.
 
 **How a story is formed**
 - **A branch is a condition, not a rule.** The SIR step merges a method's `if`, `throw` and `BadRequest`
-  lines into one *"Validates the request before processing"* rule, with the lines listed in `conditions`
-  and `conditionLines`. For older SIRs that have one rule per branch, the story step merges them the same
-  way.
-- **A rule is a requirement, not a story.** A functional story is one piece of business behaviour: the
-  rules of one legacy method.
-  - Its acceptance criteria are one validation scenario, one scenario per operation (read, write,
-    delegate, external call), and one parity scenario.
-  - A method with more than 6 operations is split into parts, so a story never has more than 8 scenarios.
-  - Every rule stays in `trace.ruleIds`.
+  lines into one *"Validates the request before processing"* rule, with the lines listed in `conditions`.
+- **One story is one business use case** (one SIR contract), never one per code method. Its acceptance
+  criteria are: one line for its business checks (quoting the status values and messages they use), one
+  for the records it saves, one for each notification or outside system, one for the information it shows
+  (read-only use cases), one for adjacent workflows (only when it changes records), and one showing the
+  result is identical to the current system, which also cites the internal calls. Max 8.
+- **Business decisions (C#).** The SIR step reads each use case with the C# syntax tree (`apps/api/app/business_logic.py`): every `if` / `else` / `switch` / `foreach` / `catch` path of the entry
+  method and the helper methods it calls, with what happens on it (values set, refusals and errors, records
+  added / updated / deleted, emails sent). Each becomes a rule (`astNode` ending `:DECIDES`, with a `logic`
+  field) and one acceptance criterion, worded by `scripts/checks_text.py`, e.g. "Given the invoice has not been
+  saved yet and an invoice with the same invoice number and the same insurance provider already exists, ...
+  then the request is refused with the error "InvoiceNumber"". Up to 16 criteria; more than 8 is flagged
+  for splitting.
+- **The template never guesses.** It states only what the SIR proves. Translating a code condition such as
+  `entity.Id == 0` into business words is the AI refinement's (or a person's) job; a rewrite that drops a
+  rule id is rejected and the template is kept.
+- **Same action twice** (e.g. a screen and an API that both create an invoice) raises a `Q-DUP-nn` question.
+- **Legacy plumbing is not a story.** Rules classified as plumbing are technical and are left out.
+- Every story still keeps its `trace` in `backlog.json`, but it is not shown or pushed.
 
-**How a story is sized: three factors, each scored 1 (very low) to 5 (very high)**
-Each level is backed by evidence the team can check, recorded in `estimation.<factor>.evidence`.
-`scripts/estimation.py` computes them.
+**How a story is sized: three business factors, each scored 1 (very low) to 5 (very high)**
+Each level is backed by evidence in `estimation.<factor>.evidence`. `scripts/estimation.py` computes them.
 
-| Factor | What raises it (evidence the script reads) |
+| Factor | What raises it |
 |---|---|
-| **Complexity** (technical and domain difficulty) | 3–5 decision points: +1. 6 or more: +2. Deterministic-core rules (formulas, writes, external calls) that must be reproduced exactly: +1. Touching 4 or more components: +1. Legacy coupling or framework paradigm (Web Forms, WCF, deep call chain): +1. Flow story: number of steps, external integrations. |
-| **Amount of work** (volume and extent) | Operations to rebuild and test, plus 0.5 per condition (each needs a test case), plus 1 for data writes. This maps to 1–5 at the thresholds 1 / 3 / 6 / 10. Code that needs refactoring before it can be tested: +1. Flow story: steps to wire, side effects to verify, adjacent workflows to regression-test. |
-| **Risk and uncertainty** (knowns vs unknowns) | External system dependency: +1. Relevant unknowns from the legacy assessment: +1 each, up to +2 (data such as stored procedures or shared tables; integration; security; untraced calls or undocumented intent). Flow story: up to +3. **Team context:** no one knows the legacy stack: +1. New to the target stack: +1. Has built something similar before: −1. |
+| **Business rules** (`rules`) | 3–5 business conditions: +1; 6 or more: +2. Exact calculations or policies that must not change: +1. 4 or more rules in one behaviour: +1. Rules on money, eligibility or compliance: +1. Flow story: number of process steps, hand-offs to outside parties. |
+| **Process scope** (`scope`) | Business outcomes to verify, plus 0.5 per condition (each an acceptance scenario), plus 1 when business records change, plus 1 when 3 or more business entities are involved; mapped to 1–5 at 1 / 3 / 6 / 10. Flow story: steps end to end, outcomes to verify, adjacent business workflows that must keep working. |
+| **Business uncertainty** (`uncertainty`) | Depends on an outside party or system: +1. Business intent not documented in the legacy system: +1. Money/compliance rules that must not change (errors have direct business impact): +1. Flow story: open business questions: +1. |
 
 **Scale and reference story.** The three levels are added up (3–15) and compared with the reference
-story, *"Read one record and return it"*. That story scores C1 + W2 + R1 = 4, which is **2 points**.
+story, *"Look up one business record"*: B1 + S2 + U1 = 4, which is **2 points**.
 
 | Factor sum | ≤3 | 4–5 | 6–7 | 8–9 | 10–11 | 12–13 | 14–15 |
 |---|---|---|---|---|---|---|---|
 | Points | 1 | 2 | 3 | 5 | 8 | 13 (split if you can) | 21 (must split) |
 
-The script labels the backlog story closest to the reference profile `reference-story`, and adds
-`Q-EST-02` so the team can confirm it or replace it with a story they have already delivered.
-`estimation.confidence` is `high`, `medium` or `low`, following the risk level.
-`estimation.inputsNeeded` lists what the cross-functional team must bring to size or finish the story:
-- Design: a wireframe, for screen controllers.
-- QA: edge cases, when there are 3 or more conditions.
-- DBA: stored procedures and shared tables.
-- Integration: a sandbox and contract for external dependencies.
-
-**Team context.** Pass it as `engagement.teamContext = {legacyStackFamiliar, targetStackFamiliar,
-builtSimilarBefore}`, or on the command line as `--team-knows-legacy / --team-knows-target /
---team-built-similar yes|no`. An unknown answer adds no risk and raises `Q-EST-03`.
-
-**Human vs AI capability.** Every story gets two estimates. The team plans with the AI-assisted one
-(`storyPoints = estimation.aiPoints`). `estimation.humanPoints` is the manual baseline.
-AI re-scores the same three factors:
-- It removes **55% of the Amount of work** (65% at L3, where an automated parity harness takes over
-  regression testing).
-- It removes **25% of the Complexity**, because it reads and explains the legacy code.
-- It removes **5% of the Risk**, because answers still come from people, vendors and DBAs.
-
-| Level | Team working style | Multiplier |
-|---|---|---|
-| L0 | No AI tools | 0 (AI-assisted = manual) |
-| L1 | IDE autocomplete or chat only | 0.5 |
-| L2 (default) | AI agent with the SIR, AST and this backlog as context | 1.0 |
-| L3 | L2 plus an automated legacy-replay parity harness in CI | 1.2 |
-
-Set the level with `--ai-capability` or `engagement.aiCapability`. If it is not set, L2 is assumed and
-`Q-EST-01` is raised.
-
-**Limits**
-- A story never claims more than 70% saving, and an epic never more than 60%.
-- `estimation.humanOnly` is effort only people can do (2 points when risk is 4 or more, or when a flow
-  story has open questions). `aiPoints` never goes below it.
-
-**Invoice module, 104 SIR rules**
-
-| | Before | Now |
-|---|---|---|
-| Stories | 121 | **45** |
-| Manual baseline | 455 points | **204 points** |
-| AI-assisted at L2 | — | **100 points** |
-| AI-assisted at L1 / L3 | — | 140 / 96 points |
+The script labels the story closest to the reference profile `reference-story` and adds `Q-EST-02` so the
+team can confirm it or replace it with a story they have already delivered.
 
 **Your job during refinement**
-- Check the evidence for each factor, not the arithmetic. If the evidence is wrong or incomplete (for
-  example, the domain rule is harder than the code shows, or a vendor dependency is missing), change the
-  factor level.
-- Record the reason in `estimation.notes`.
-- Keep `storyPoints` between `estimation.points` and `estimation.humanPoints`. Never lower `humanPoints`.
+- Check the evidence for each factor. If the business rule is harder than the evidence shows (for example a
+  regulatory or financial nuance), raise `storyPoints` by at most one Fibonacci step and record why in
+  `estimation.notes`. Never lower `storyPoints` below `estimation.points`.
+
+**What is shown.** Each story is shown as a card: ID, the rules it covers and the legacy behaviour,
+story points, **Title** (the user story), **Description**, **Acceptance criteria** (one per line) and
+**Labels**. In the app every field is editable and saved on blur (`PATCH /api/engagements/{id}/
+user-stories/stories/{storyId}`); **Remove** deletes a story (`DELETE` on the same path); ticked
+cards limit a tracker push to those stories.
 
 ### 4. Validate and review with the user
 ```bash
 python .agents/skills/sir-user-story-generator/scripts/push_backlog.py validate backlog.json
 ```
-Fix every `ERROR`. Regenerate the markdown and show the user a summary: the counts, **human-baseline
-vs AI-assisted points per epic with the AI efficiency %, and the capability level assumed**, any open
+Fix every `ERROR`. Regenerate the markdown and show the user a summary: the counts, **story points per epic**, any open
 questions, and anything you split, bundled or re-prioritised. To regenerate the markdown:
 `python -c "import sys,json; sys.path.insert(0,'.agents/skills/sir-user-story-generator/scripts'); from backlog_model import backlog_markdown; open('backlog.md','w',encoding='utf-8').write(backlog_markdown(json.load(open('backlog.json',encoding='utf-8'))))"`
 
@@ -211,8 +190,11 @@ How the push behaves:
 
 ## Files
 - `scripts/sir_to_stories.py`: builds the SIR → backlog scaffold (stories per legacy behaviour).
-- `scripts/estimation.py`: story points from Complexity, Amount of Work and Risk & Uncertainty, relative
-  to a reference story, plus the AI-assisted estimate.
+- `apps/api/app/business_logic.py` (app side): reads the business decisions of a C# use case from its syntax tree for the SIR.
+- `scripts/checks_text.py`: turns each business check (a code condition) into plain English, e.g.
+  `if (model.Particulars.Count > 1)` -> "there is more than 1 particular"; never guesses a meaning.
+- `scripts/estimation.py`: story points from business complexity (Business rules, Process scope,
+  Business uncertainty), relative to a reference story. Technical details are not considered.
 - `scripts/backlog_model.py`: the backlog schema, validation, and renderers (Markdown, HTML, Jira ADF,
   Jira wiki).
 - `scripts/push_backlog.py`: `validate` and `push` for Jira, Azure DevOps, Bitbucket and GitHub. Uses

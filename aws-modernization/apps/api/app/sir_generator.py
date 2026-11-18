@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import legacy_assessment, scope_modules, store
+from . import business_logic, legacy_assessment, scope_modules, store
 from .llm_json import ask_json
 
 logger = logging.getLogger(__name__)
@@ -265,6 +265,47 @@ def _guard_rule(branch: list[dict]) -> list[dict]:
              "snippet": "\n".join(b["snippet"] for b in branch)[:800]}]
 
 
+def _action_code(a: dict) -> str:
+    """One business-logic action as a short, code-faithful phrase (the story step words it for people)."""
+    t = a.get("type")
+    if t == "set":
+        return f"sets {a['target']} = {a['value']}"
+    if t == "refuse":
+        return f"refuses the request (error \"{a['error']}\")" if a.get("error") else "refuses the request"
+    if t == "not-found":
+        return "returns not found"
+    if t == "throw":
+        return f"throws \"{a['message']}\"" if a.get("message") else "throws an error"
+    if t == "data":
+        return f"{a['op']}s {a['entity']}"
+    if t in ("notify", "call"):
+        return f"calls {a['method']}({', '.join(a.get('args') or [])})"
+    return t or ""
+
+
+def _logic_rules(sir_id: str, logic: dict, owner: str) -> list[dict]:
+    """The use case's business decisions as SIR rules: each anchored to the file and line of its first action."""
+    out = []
+    for r in logic["rules"]:
+        when = " and ".join(
+            "something fails" if p.get("catch") else
+            f"for each {p['foreach']} in {p['code']}" if p.get("foreach") else
+            ("not " if p.get("negated") else "") + str(p.get("code"))
+            for p in r["when"])
+        then = "; ".join(_action_code(a) for a in r["then"])
+        classification = ("Error Handling" if any(p.get("catch") for p in r["when"]) else
+                          "Business Decision" if r["when"] else "Business Value")
+        out.append({
+            "ruleId": f"{sir_id}.R0", "statement": (f"When {when}: {then}" if when else then)[:300],
+            "classification": classification, "kind": "deterministic_business_rule",
+            "astNode": f"AST:{_short(owner, 1)}.{r['method']}:L{r['line']}:DECIDES",
+            "legacyLines": f"{r['file']}#L{r['line']}", "snippet": "\n".join(r["snippets"])[:800],
+            "trustBoundary": DETERMINISTIC_CORE, "source": "deterministic", "_target": f"{owner}.{r['method']}",
+            "logic": {"method": r["method"], "when": r["when"], "then": r["then"]},
+        })
+    return out
+
+
 def _workflow_contract(sir_id: str, flow: dict, wf: dict | None, src: _Source, label: dict[str, str],
                        node_label: dict[str, str]) -> dict:
     steps = (wf or {}).get("steps", [])
@@ -280,7 +321,19 @@ def _workflow_contract(sir_id: str, flow: dict, wf: dict | None, src: _Source, l
     rules.sort(key=_priority)  # stable: keeps source order within a class
     rules = rules[:MAX_RULES]
     branch, inputs = _branch_rules(sir_id, 0, flow, wf, src, limit=MAX_GUARD_CONDITIONS)
-    rules = (_guard_rule(branch) + rules)[:MAX_RULES + 1]
+    # C#: the full business logic (every decision with its outcome, across the helpers it calls) replaces the
+    # bare list of the entry method's `if` lines. Other languages keep the condition list.
+    logic = None
+    if wf and wf.get("entryPoint"):
+        try:
+            logic = business_logic.analyse(wf["entryPoint"], steps, src.lines)
+        except Exception:   # analysis must never take SIR generation down
+            logger.exception("business-logic analysis failed for %s", wf.get("entryPoint"))
+            logic = None
+    if logic:
+        rules = _logic_rules(sir_id, logic, wf["entryPoint"].rsplit(".", 1)[0]) + rules
+    else:
+        rules = (_guard_rule(branch) + rules)[:MAX_RULES + 1]
     for i, r in enumerate(rules, 1):
         r["ruleId"] = f"{sir_id}.R{i}"
     reads, writes = flow["tablesRead"], flow["tablesWritten"]
@@ -318,6 +371,9 @@ def _workflow_contract(sir_id: str, flow: dict, wf: dict | None, src: _Source, l
         "sideEffects": side or ["No persistent side effects detected (read-only flow)"],
         "integrations": [f"INT-{node_label.get(x, x.rsplit('.', 1)[-1])}" for x in flow.get("externals", [])],
         "trace": {"entryPoint": flow["entryPoint"], "evidence": flow.get("evidence")},
+        # what the decision rules refer to: local variables (per method) and helper summaries (when they fail)
+        **({"businessLogic": {"entry": logic["entry"], "aliases": logic["aliases"], "helpers": logic["helpers"]}}
+           if logic else {}),
     }
 
 

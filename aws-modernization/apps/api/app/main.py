@@ -1236,6 +1236,40 @@ def generate_user_stories(eid: str, body: StoriesGenerateIn | None = None):
         raise HTTPException(500, f"User story generation failed: {exc}") from exc
 
 
+class StoryEditIn(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    acceptanceCriteria: list[str] | None = None
+    labels: list[str] | None = None
+    storyPoints: int | None = None
+
+
+@app.patch("/api/engagements/{eid}/user-stories/stories/{sid}")
+def edit_user_story(eid: str, sid: str, body: StoryEditIn):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return user_stories.update_story(eng, sid, body.model_dump(exclude_none=True))
+    except KeyError as exc:
+        raise HTTPException(404, f"Story {sid} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/engagements/{eid}/user-stories/stories/{sid}")
+def delete_user_story(eid: str, sid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return user_stories.remove_story(eng, sid)
+    except KeyError as exc:
+        raise HTTPException(404, f"Story {sid} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get("/api/engagements/{eid}/user-stories/export")
 def export_user_stories(eid: str, format: str = "json"):
     eng = store.load(eid)

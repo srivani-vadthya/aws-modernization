@@ -1,19 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Engagement, type Epic, type Feature, type Story } from "../api";
+import { api, type Engagement, type Epic, type Feature, type Story, type StoryEdit } from "../api";
 import { TrackerIntegration } from "./TrackerIntegration";
-
-const TYPE_CLS: Record<Story["type"], string> = {
-  functional: "bg-blue-100 text-blue-700 border-blue-200",
-  flow: "bg-violet-100 text-violet-700 border-violet-200",
-  enabler: "bg-slate-100 text-slate-600 border-slate-200",
-};
-
-const PRIORITY_CLS: Record<string, string> = {
-  Must: "bg-red-50 text-red-700 border-red-200",
-  Should: "bg-amber-50 text-amber-700 border-amber-200",
-  Could: "bg-sky-50 text-sky-700 border-sky-200",
-  "Won't": "bg-slate-50 text-slate-500 border-slate-200",
-};
 
 export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (eng: Engagement) => void }) {
   const scopeId = e.scope?.capabilityId ?? null;
@@ -22,7 +9,44 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refine, setRefine] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [adoBusy, setAdoBusy] = useState(false);
+  const [adoResult, setAdoResult] = useState<{ ok: boolean; text: string; details?: string[] } | null>(null);
   const attempted = useRef<string | null>(null);
+
+  /** Push every generated story (with its epic and features) to Azure DevOps, using the ADO_* settings on the server. */
+  async function pushToAdo() {
+    const total = e.userStories?.counts.stories ?? 0;
+    if (!window.confirm(`Create work items in Azure DevOps for all ${total} user stories, with their epic and features?\n\n` +
+                        "Items pushed before are not created again.")) return;
+    setAdoBusy(true);
+    setAdoResult(null);
+    try {
+      const r = await api.pushUserStories(e.id, { provider: "ado", apply: true, confirm: true, allowTemplate: true });
+      const created = r.summary.created ?? 0;
+      const existing = r.summary.exists ?? 0;
+      const problems = r.rows.filter((row) => row.action === "failed" || row.action === "skipped");
+      if (problems.length > 0) {
+        setAdoResult({
+          ok: false,
+          text: `Push to Azure DevOps (${r.target}) finished with ${problems.length} error${problems.length > 1 ? "s" : ""}` +
+                (created ? `; ${created} item${created > 1 ? "s were" : " was"} created` : "") + ".",
+          details: problems.slice(0, 5).map((row) => `${row.title}: ${row.error ?? row.note ?? row.action}`),
+        });
+      } else {
+        setAdoResult({
+          ok: true,
+          text: `Pushed to Azure DevOps (${r.target}): ${created} work item${created === 1 ? "" : "s"} created` +
+                (existing ? `, ${existing} already there` : "") + ".",
+        });
+      }
+      onChange(await api.get(e.id));   // refresh "last push" and the tracker panel
+    } catch (err) {
+      setAdoResult({ ok: false, text: `Push to Azure DevOps failed: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setAdoBusy(false);
+    }
+  }
 
   async function generate() {
     setBusy(true);
@@ -77,6 +101,23 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
 
   const errors = us.validation.filter((v) => v.level === "ERROR");
   const ref = us.refinement;
+  const allStories = us.backlog.epics.flatMap((ep) => ep.features.flatMap((f) => f.stories));
+  const storyTitles = new Map(allStories.map((s) => [s.id, s.title] as const));
+  const refStory = us.backlog.estimationModel?.reference;
+  const live = [...selected].filter((id) => storyTitles.has(id));   // drop ids of removed / regenerated stories
+  const ctx: CardCtx = {
+    engagementId: e.id,
+    selected: new Set(live),
+    order: new Map(allStories.map((s, i) => [s.id, i + 1] as const)),
+    onChange,
+    toggle: (id) =>
+      setSelected((cur) => {
+        const next = new Set(cur);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+  };
 
   return (
     <div className="space-y-5">
@@ -87,8 +128,8 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Epic → Feature → User Story backlog</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                One feature per SIR contract, one story per piece of business behaviour (the rules of one legacy method, each an acceptance
-                scenario), plus a flow story and a plumbing enabler. Every rule is traced to the legacy lines it came from.
+                Each card is one user story: edit its title, description, acceptance criteria and labels in place (saved when you leave a
+                field). Story points are sized on business complexity only, not on technical details.
               </p>
             </div>
           </div>
@@ -110,9 +151,37 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
             <a href={api.userStoriesExportUrl(e.id, "json")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
               JSON
             </a>
+            <button
+              type="button"
+              disabled={adoBusy || busy}
+              onClick={() => void pushToAdo()}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {adoBusy ? "Pushing to ADO…" : "Push to ADO"}
+            </button>
           </div>
         </div>
         {error && <p role="alert" className="mt-2 text-xs text-red-700">Regeneration failed: {error}</p>}
+        {adoResult && (
+          <div
+            role={adoResult.ok ? "status" : "alert"}
+            className={`mt-3 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-xs ${
+              adoResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"
+            }`}
+          >
+            <div>
+              <p className="font-semibold">{adoResult.text}</p>
+              {adoResult.details && (
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {adoResult.details.map((d) => <li key={d}>{d}</li>)}
+                </ul>
+              )}
+            </div>
+            <button type="button" onClick={() => setAdoResult(null)} aria-label="Dismiss" className="font-bold opacity-60 hover:opacity-100">
+              ×
+            </button>
+          </div>
+        )}
 
         <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {(
@@ -120,35 +189,21 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
               ["Epics", us.counts.epics],
               ["Features", us.counts.features],
               ["Stories", us.counts.stories],
-              ...(us.counts.humanPoints != null
-                ? [
-                    ["Story points (AI-assisted)", us.counts.storyPoints, "Effort for the team working with AI from the SIR; this is what to plan with"],
-                    ["AI efficiency", `${Math.round((us.counts.aiEfficiency ?? 0) * 100)}%`, "Share of the manual effort that AI removes"],
-                  ]
-                : [["Story points", us.counts.storyPoints]]),
+              ["Story points", us.counts.storyPoints],
               ["Open questions", us.counts.openQuestions],
-            ] as [string, number | string, string?][]
-          ).map(([label, value, hint]) => (
-            <div key={label} title={hint} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            ] as [string, number][]
+          ).map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
               <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</dt>
               <dd className="text-lg font-bold text-slate-900">{value}</dd>
             </div>
           ))}
         </dl>
-        {us.backlog.estimationModel && (
+        {refStory?.storyId && (
           <p className="mt-2 text-[11px] text-slate-500">
-            Team AI capability: <span className="font-semibold text-slate-700">{us.backlog.estimationModel.capability}</span>
-            {us.backlog.estimationModel.assumed && " (assumed, confirm in Q-EST-01)"}. L0 no AI tools · L1 autocomplete/chat · L2 AI agent with
-            SIR context · L3 plus an automated parity harness.
-            {us.backlog.estimationModel.reference && (
-              <>
-                {" "}Sized on Complexity + Amount of work + Risk & uncertainty (1–5 each) relative to the reference story{" "}
-                <span className="font-semibold text-slate-700">
-                  {us.backlog.estimationModel.reference.storyId ?? us.backlog.estimationModel.reference.title}
-                </span>{" "}
-                = {us.backlog.estimationModel.reference.points} pts (confirm in Q-EST-02).
-              </>
-            )}
+            Sized relative to the reference story{" "}
+            <span className="font-semibold text-slate-700">{storyTitles.get(refStory.storyId) ?? refStory.title}</span> = {refStory.points} pts
+            (confirm in Q-EST-02).
           </p>
         )}
         <p className="mt-3 text-[11px] text-slate-500">
@@ -166,8 +221,20 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
         )}
       </section>
 
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+        <span>{live.length > 0 ? `${live.length} of ${allStories.length} stories selected for the tracker push` : "Tick stories to push only those to a tracker"}</span>
+        <button type="button" onClick={() => setSelected(new Set(allStories.map((s) => s.id)))} className="font-semibold text-blue-700 hover:underline">
+          Select all
+        </button>
+        {live.length > 0 && (
+          <button type="button" onClick={() => setSelected(new Set())} className="font-semibold text-blue-700 hover:underline">
+            Clear
+          </button>
+        )}
+      </div>
+
       {us.backlog.epics.map((epic) => (
-        <EpicBlock key={epic.id} epic={epic} />
+        <EpicBlock key={epic.id} epic={epic} ctx={ctx} />
       ))}
 
       {us.backlog.openQuestions.length > 0 && (
@@ -176,7 +243,7 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
           <ul className="mt-2 space-y-1.5 text-xs text-amber-900">
             {us.backlog.openQuestions.map((q) => (
               <li key={q.id}>
-                <span className="font-mono font-bold">{q.storyId ?? q.id}</span> {q.question}
+                <span className="font-bold">{(q.storyId && storyTitles.get(q.storyId)) || "General"}:</span> {q.question}
               </li>
             ))}
           </ul>
@@ -203,212 +270,201 @@ export function UserStoriesPanel({ e, onChange }: { e: Engagement; onChange: (en
         engagementId={e.id}
         stories={us}
         onPushed={() => void api.get(e.id).then(onChange)}
+        only={live}
       />
     </div>
   );
 }
 
-function EpicBlock({ epic }: { epic: Epic }) {
+type CardCtx = {
+  engagementId: string;
+  selected: Set<string>;
+  toggle: (id: string) => void;
+  order: Map<string, number>;
+  onChange: (eng: Engagement) => void;
+};
+
+const POINTS = [1, 2, 3, 5, 8, 13];
+
+function EpicBlock({ epic, ctx }: { epic: Epic; ctx: CardCtx }) {
+  const points = epic.features.reduce((n, f) => n + f.stories.reduce((m, s) => m + s.storyPoints, 0), 0);
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-xs">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Epic</span>
-          <span className="font-mono text-[11px] text-slate-500">{epic.id}</span>
-          <h4 className="text-base font-bold text-slate-900">{epic.title}</h4>
-        </div>
-        <p className="mt-1 text-xs text-slate-600">{epic.description}</p>
-        {epic.businessOutcome && (
-          <p className="mt-1.5 text-xs text-emerald-800">
-            <span className="font-bold">Business outcome:</span> {epic.businessOutcome}
-          </p>
-        )}
-        {epic.approach && (
-          <p className="mt-1.5 text-xs text-slate-600">
-            <span className="font-bold text-slate-700">Approach:</span> {epic.approach}
-          </p>
-        )}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-4">
+        <span className="rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Epic</span>
+        <h4 className="text-base font-bold text-slate-900">{epic.title}</h4>
+        <span className="ml-auto font-mono text-[10px] text-slate-500">{points} pts</span>
       </div>
       <div className="space-y-3 p-4">
         {epic.features.map((f, i) => (
-          <FeatureBlock key={f.id} feature={f} defaultOpen={i === 0} />
+          <FeatureBlock key={f.id} feature={f} defaultOpen={i === 0} ctx={ctx} />
         ))}
       </div>
     </section>
   );
 }
 
-function FeatureBlock({ feature, defaultOpen }: { feature: Feature; defaultOpen: boolean }) {
+function FeatureBlock({ feature, defaultOpen, ctx }: { feature: Feature; defaultOpen: boolean; ctx: CardCtx }) {
   const points = feature.stories.reduce((n, s) => n + s.storyPoints, 0);
-  const manual = feature.stories.reduce((n, s) => n + (s.estimation?.humanPoints ?? s.storyPoints), 0);
   return (
     <details open={defaultOpen} className="rounded-lg border border-slate-200 bg-slate-50/60">
       <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-3">
         <span className="rounded bg-sky-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Feature</span>
-        <span className="font-mono text-[11px] text-slate-500">{feature.id}</span>
         <span className="text-sm font-semibold text-slate-900">{feature.title}</span>
         <span className="ml-auto font-mono text-[10px] text-slate-500">
-          {feature.stories.length} stories · {points} pts{manual !== points && ` (manual ${manual})`}
+          {feature.stories.length} {feature.stories.length === 1 ? "story" : "stories"} · {points} pts
         </span>
       </summary>
-      <div className="space-y-2 border-t border-slate-200 px-4 py-3">
-        <p className="text-xs text-slate-600">{feature.description}</p>
-        {feature.stateMachine && (
-          <p className="break-words font-mono text-[10px] text-violet-700">{feature.stateMachine}</p>
-        )}
-        {feature.legacyAssessment && feature.legacyAssessment.factors.length > 0 && (
-          <details className="rounded-lg border border-amber-200 bg-amber-50/60">
-            <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-amber-900">
-              Legacy findings (feed the complexity and risk factors) · {feature.legacyAssessment.paradigm}
-            </summary>
-            <ul className="space-y-1 border-t border-amber-200 px-3 py-2 text-[11px] text-amber-900">
-              {feature.legacyAssessment.factors.map((f) => (
-                <li key={f.category + f.finding}>
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase">{f.category}</span>{" "}
-                  {f.finding}
-                  {f.evidence && <span className="ml-1 break-all font-mono text-[10px] text-amber-700">{f.evidence}</span>}
-                </li>
-              ))}
-              {feature.legacyAssessment.regressionScope.length > 0 && (
-                <li className="pt-1 font-semibold">Regression scope: {feature.legacyAssessment.regressionScope.join(", ")}</li>
-              )}
-            </ul>
-          </details>
-        )}
-        {feature.definitionOfDone && feature.definitionOfDone.length > 0 && (
-          <details className="rounded-lg border border-slate-200 bg-white">
-            <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-slate-600">Definition of done</summary>
-            <ul className="list-disc space-y-0.5 border-t border-slate-100 py-2 pl-7 pr-3 text-[11px] text-slate-600">
-              {feature.definitionOfDone.map((d) => <li key={d}>{d}</li>)}
-            </ul>
-          </details>
-        )}
+      <div className="space-y-3 border-t border-slate-200 p-3">
         {feature.stories.map((s) => (
-          <StoryRow key={s.id} story={s} />
+          <StoryCard key={s.id} story={s} ctx={ctx} />
         ))}
       </div>
     </details>
   );
 }
 
-function StoryRow({ story }: { story: Story }) {
-  const [open, setOpen] = useState(false);
-  const t = story.trace;
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50">
-        <span className="text-[10px] text-slate-400">{open ? "▼" : "▶"}</span>
-        <span className="shrink-0 font-mono text-[10px] font-bold text-blue-700">{story.id}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-slate-900">{story.title}</span>
-        <span className={`hidden shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase sm:block ${TYPE_CLS[story.type]}`}>{story.type}</span>
-        <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold ${PRIORITY_CLS[story.priority] ?? ""}`}>{story.priority}</span>
-        <span
-          className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600"
-          title={story.estimation?.humanPoints != null ? `AI-assisted ${story.storyPoints} pts; manual baseline ${story.estimation.humanPoints} pts` : undefined}
-        >
-          {story.storyPoints} pts
-          {story.estimation?.humanPoints != null && story.estimation.humanPoints !== story.storyPoints && (
-            <span className="text-slate-400"> / {story.estimation.humanPoints}</span>
-          )}
-        </span>
-        {story.narrativeSource === "template" && (
-          <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700" title="Mechanical wording, not yet refined">template</span>
-        )}
-      </button>
-      {open && (
-        <div className="space-y-3 border-t border-slate-100 px-4 py-3 text-xs">
-          <p className="leading-relaxed text-slate-800">
-            <span className="font-semibold">As a</span> {story.narrative.asA}, <span className="font-semibold">I want</span> {story.narrative.iWant},{" "}
-            <span className="font-semibold">so that</span> {story.narrative.soThat}.
-          </p>
-          {story.description && <p className="text-slate-600">{story.description}</p>}
-          {story.estimation?.complexity && <EstimateBlock story={story} />}
-          <div>
-            <h6 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Acceptance criteria</h6>
-            <div className="space-y-1.5">
-              {story.acceptanceCriteria.map((a, i) => (
-                <pre key={i} className="whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 font-mono text-[11px] text-emerald-300">{a}</pre>
-              ))}
-            </div>
-          </div>
-          <div className="grid gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
-            <div>
-              <span className="block text-[10px] font-semibold uppercase text-slate-400">Legacy trace</span>
-              <span className="font-mono text-[11px] text-slate-700">{t.sirId} · {t.ruleId ?? (t.ruleIds ?? []).join(", ")}</span>
-            </div>
-            <div>
-              <span className="block text-[10px] font-semibold uppercase text-slate-400">Source lines · AST node</span>
-              <span className="break-all font-mono text-[11px] text-blue-700">{t.legacyLines || "n/a"}</span>
-              <span className="block break-all font-mono text-[10px] text-purple-700">{t.astNode}</span>
-            </div>
-            {t.snippet && (
-              <pre className="overflow-x-auto rounded bg-slate-800 px-2.5 py-2 font-mono text-[10px] text-slate-300 sm:col-span-2">{t.snippet}</pre>
-            )}
-          </div>
-          {story.trustBoundary?.startsWith("Deterministic") && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-[11px] font-semibold text-red-700">
-              🔒 {story.trustBoundary}: wording may not change its numbers, literals or conditions.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+/** "SIR-001.R1".."SIR-001.R6", "SIR-001.R9" -> "R1–R6, R9" (same as the backend's citation format). */
+function citeRules(ids: string[]): string {
+  const short = [...new Set(ids.map((r) => r.split(".").pop() ?? r))];
+  const nums = short.map((r) => /^R(\d+)$/.exec(r)).map((m) => (m ? Number(m[1]) : NaN));
+  if (nums.some(Number.isNaN)) return short.join(", ");
+  const sorted = [...new Set(nums)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const start = sorted[i];
+    while (i + 1 < sorted.length && sorted[i + 1] === sorted[i] + 1) i++;
+    parts.push(start === sorted[i] ? `R${start}` : `R${start}–R${sorted[i]}`);
+  }
+  return parts.join(", ");
 }
 
-const FACTORS: { key: "complexity" | "work" | "risk"; label: string }[] = [
-  { key: "complexity", label: "Complexity" },
-  { key: "work", label: "Amount of work" },
-  { key: "risk", label: "Risk & uncertainty" },
-];
+/** Older backlogs stored multi-line Gherkin scenarios: show each as one line so "one per line" holds. */
+const oneLine = (a: string) => a.replace(/^\s*Scenario:[^\n]*\n/, "").replace(/\s*\n\s*/g, ", ").replace(/,\s*(When|Then|And)\b/g, (_, w: string) => `, ${w.toLowerCase()}`);
 
-const CONFIDENCE_CLS: Record<string, string> = {
-  high: "bg-emerald-100 text-emerald-800",
-  medium: "bg-amber-100 text-amber-800",
-  low: "bg-red-100 text-red-800",
-};
+type Draft = { title: string; description: string; criteria: string; labels: string };
 
-/** Story points from evidence: three 1-5 factors, relative to the reference story, manual vs AI-assisted. */
-function EstimateBlock({ story }: { story: Story }) {
-  const e = story.estimation!;
+const draftOf = (s: Story): Draft => ({
+  title: s.title,
+  description: s.description ?? "",
+  criteria: s.acceptanceCriteria.map(oneLine).join("\n"),
+  labels: s.labels.join(", "),
+});
+
+const FIELD = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100";
+const LABEL = "mb-1 block text-sm text-slate-600";
+
+/** One user story, as an editable card: Title, Description, Acceptance criteria (one per line), Labels. */
+function StoryCard({ story, ctx }: { story: Story; ctx: CardCtx }) {
+  const [draft, setDraft] = useState<Draft>(() => draftOf(story));
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const saved = useRef<Draft>(draftOf(story));
+
+  // The server's copy changed (regenerate, or a save came back): take it, unless the field is mid-edit.
+  useEffect(() => {
+    const next = draftOf(story);
+    setDraft((d) => ({
+      title: d.title === saved.current.title ? next.title : d.title,
+      description: d.description === saved.current.description ? next.description : d.description,
+      criteria: d.criteria === saved.current.criteria ? next.criteria : d.criteria,
+      labels: d.labels === saved.current.labels ? next.labels : d.labels,
+    }));
+    saved.current = next;
+  }, [story]);
+
+  async function save(changes: StoryEdit) {
+    setStatus("saving");
+    setError(null);
+    try {
+      ctx.onChange(await api.updateStory(ctx.engagementId, story.id, changes));
+      setStatus("saved");
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function commit(field: keyof Draft) {
+    if (draft[field] === saved.current[field]) return;
+    if (field === "title") void save({ title: draft.title });
+    if (field === "description") void save({ description: draft.description });
+    if (field === "criteria") void save({ acceptanceCriteria: draft.criteria.split("\n").map((l) => l.trim()).filter(Boolean) });
+    if (field === "labels") void save({ labels: draft.labels.split(",").map((l) => l.trim()).filter(Boolean) });
+  }
+
+  async function remove() {
+    if (!window.confirm(`Remove ${story.id} from the backlog?`)) return;
+    try {
+      ctx.onChange(await api.removeStory(ctx.engagementId, story.id));
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const rules = citeRules((story.trace.ruleIds ?? [story.trace.ruleId]).filter((r): r is string => !!r));
+  const id = `US-${String(ctx.order.get(story.id) ?? 0).padStart(3, "0")}`;
+  const bind = (field: keyof Draft) => ({
+    value: draft[field],
+    onChange: (ev: { target: { value: string } }) => setDraft((d) => ({ ...d, [field]: ev.target.value })),
+    onBlur: () => commit(field),
+  });
+
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 text-[11px]">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-bold text-slate-900">Estimate</span>
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
-          C{e.complexity!.level} + W{e.work!.level} + R{e.risk!.level} = {e.factorSum} → {e.humanPoints} pts manual
+    <article className="rounded-xl border border-slate-200 bg-white shadow-xs">
+      <header className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3.5">
+        <input
+          type="checkbox"
+          checked={ctx.selected.has(story.id)}
+          onChange={() => ctx.toggle(story.id)}
+          aria-label={`Select ${id}`}
+          className="h-4 w-4 rounded border-slate-300"
+        />
+        <span className="text-sm font-bold text-slate-900" title={story.id}>{id}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-slate-500">
+          {rules && `covers ${rules}`}
+          {story.behaviour && `${rules ? " · " : ""}${story.behaviour}`}
         </span>
-        <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-emerald-800">
-          {story.storyPoints} pts AI-assisted ({Math.round((e.aiEfficiency ?? 0) * 100)}% saved, {e.capability})
+        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          <select
+            value={story.storyPoints}
+            onChange={(ev) => void save({ storyPoints: Number(ev.target.value) })}
+            aria-label="Story points"
+            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-mono text-xs text-slate-800"
+          >
+            {(POINTS.includes(story.storyPoints) ? POINTS : [...POINTS, story.storyPoints]).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          pts
+        </label>
+        <span className="w-12 text-right text-[11px] text-slate-400" aria-live="polite">
+          {status === "saving" ? "Saving…" : status === "saved" ? "Saved" : ""}
         </span>
-        {e.confidence && (
-          <span className={`rounded px-1.5 py-0.5 font-semibold ${CONFIDENCE_CLS[e.confidence] ?? ""}`}>{e.confidence} confidence</span>
-        )}
+        <button type="button" onClick={() => void remove()} className="text-sm font-semibold text-blue-700 hover:underline">
+          Remove
+        </button>
+      </header>
+      <div className="space-y-4 px-5 py-4">
+        <div>
+          <label htmlFor={`${story.id}-title`} className={LABEL}>Title</label>
+          <input id={`${story.id}-title`} {...bind("title")} className={FIELD} />
+        </div>
+        <div>
+          <label htmlFor={`${story.id}-desc`} className={LABEL}>Description</label>
+          <textarea id={`${story.id}-desc`} rows={3} {...bind("description")} className={`${FIELD} resize-y leading-relaxed`} />
+        </div>
+        <div>
+          <label htmlFor={`${story.id}-ac`} className={LABEL}>Acceptance criteria (one per line)</label>
+          <textarea id={`${story.id}-ac`} rows={4} {...bind("criteria")} className={`${FIELD} resize-y leading-relaxed`} />
+        </div>
+        <div>
+          <label htmlFor={`${story.id}-labels`} className={LABEL}>Labels (comma separated)</label>
+          <input id={`${story.id}-labels`} {...bind("labels")} className={FIELD} />
+        </div>
+        {error && <p role="alert" className="text-xs text-red-700">Not saved: {error}</p>}
       </div>
-      <table className="w-full border-collapse">
-        <tbody>
-          {FACTORS.map(({ key, label }) => {
-            const f = e[key]!;
-            return (
-              <tr key={key} className="border-t border-slate-100 align-top">
-                <td className="w-32 py-1 pr-2 font-semibold text-slate-700">{label}</td>
-                <td className="w-28 py-1 pr-2">
-                  <span className="font-mono">{f.level}/5</span> <span className="text-slate-500">{f.label}</span>
-                  {e.aiFactors && <span className="block text-[10px] text-emerald-700">AI: {e.aiFactors[key]}</span>}
-                </td>
-                <td className="py-1 text-slate-600">{f.evidence.join("; ")}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {e.reference && <p className="text-slate-500">{e.reference}.</p>}
-      {e.inputsNeeded && e.inputsNeeded.length > 0 && (
-        <p className="text-slate-600">
-          <span className="font-semibold">Inputs needed to size it:</span> {e.inputsNeeded.join("; ")}
-        </p>
-      )}
-      {e.notes && e.notes.length > 0 && <p className="text-slate-500">{e.notes.join("; ")}</p>}
-    </div>
+    </article>
   );
 }

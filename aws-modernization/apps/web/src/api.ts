@@ -121,23 +121,14 @@ export type ScopeModules = {
 
 export type EstimationFactor = { level: 1 | 2 | 3 | 4 | 5; label: string; evidence: string[] };
 
-/** Complexity + Amount of work + Risk & uncertainty (1-5 each), relative to a reference story, on Fibonacci. */
+/** Business complexity only: Business rules + Process scope + Business uncertainty (1-5 each), on Fibonacci. */
 export type StoryEstimation = {
-  complexity?: EstimationFactor;
-  work?: EstimationFactor;
-  risk?: EstimationFactor;
+  rules?: EstimationFactor;
+  scope?: EstimationFactor;
+  uncertainty?: EstimationFactor;
   factorSum?: number;
-  humanPoints?: number;
-  aiPoints?: number;
   points: number;
-  aiEfficiency?: number;
-  aiFactors?: { complexity: number; work: number; risk: number };
-  humanOnly?: number;
-  capability?: string;
-  confidence?: "high" | "medium" | "low";
   reference?: string;
-  inputsNeeded?: string[];
-  legacyFactors?: { category: string; finding: string; evidence: string; points: number }[];
   notes?: string[];
 };
 
@@ -154,18 +145,27 @@ export type Story = {
   narrativeSource: "template" | "refined";
   definitionOfDone?: string[];
   estimation?: StoryEstimation;
+  /** The legacy behaviour the story preserves, e.g. "ReassignActivity". */
+  behaviour?: string;
+  /** Set once a person has edited the story card. */
+  edited?: boolean;
   trustBoundary?: string;
   classification?: string;
   trace: { sirId: string; ruleId: string | null; ruleIds?: (string | null)[]; legacyLines: string; snippet: string; astNode: string };
 };
 
+export type StoryEdit = Partial<Pick<Story, "title" | "description" | "acceptanceCriteria" | "labels" | "storyPoints">>;
+
+/** A business area (e.g. "Invoice", "SOA"); each of its stories is one use case. */
 export type Feature = {
   id: string;
   title: string;
   description: string;
-  sirId: string;
-  stateMachine: string;
-  sideEffects: string[];
+  sirIds?: string[];
+  /** Older backlogs: one feature per SIR contract. */
+  sirId?: string;
+  stateMachine?: string;
+  sideEffects?: string[];
   narrativeSource: string;
   definitionOfDone?: string[];
   legacyAssessment?: {
@@ -193,11 +193,8 @@ export type Backlog = {
   schemaVersion: string;
   generatedAt: string;
   estimationModel?: {
-    capability: "L0" | "L1" | "L2" | "L3";
-    multiplier: number;
-    assumed: boolean;
     method?: string;
-    reference?: { title: string; description: string; complexity: number; work: number; risk: number; points: number; storyId?: string };
+    reference?: { title: string; description: string; rules: number; scope: number; uncertainty: number; points: number; storyId?: string };
   };
   epics: Epic[];
   openQuestions: { id: string; storyId: string | null; question: string }[];
@@ -210,7 +207,6 @@ export type UserStoriesState = {
   backlog: Backlog;
   counts: {
     epics: number; features: number; stories: number; storyPoints: number; refined: number; template: number; openQuestions: number;
-    humanPoints?: number; aiEfficiency?: number;
   };
   validation: { level: "ERROR" | "WARN"; message: string }[];
   refinement: { status: "llm" | "partial" | "unavailable" | "skipped"; model: string | null; refined: number; total: number; rejected: { storyId: string; reason: string }[] };
@@ -1124,6 +1120,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<PushReport>(r)),
+  updateStory: (id: string, storyId: string, changes: StoryEdit) =>
+    fetch(`/api/engagements/${id}/user-stories/stories/${encodeURIComponent(storyId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }).then((r) => parse<Engagement>(r)),
+  removeStory: (id: string, storyId: string) =>
+    fetch(`/api/engagements/${id}/user-stories/stories/${encodeURIComponent(storyId)}`, { method: "DELETE" }).then((r) =>
+      parse<Engagement>(r),
+    ),
   userStoriesExportUrl: (id: string, format: "json" | "md") => `/api/engagements/${id}/user-stories/export?format=${format}`,
   packUrl: (id: string) => `/api/engagements/${id}/pack`,
 };

@@ -1,16 +1,16 @@
 """Backlog schema, validation and renderers for the SIR -> user story generator.
 
-Shape (nested; every id is stable and every story keeps a `trace` back to the legacy code):
+Shape (nested; every id is stable and every story keeps a `trace` back to the legacy code). Epic = module,
+Feature = business area, Story = one business use case (one SIR contract):
 
     {"schemaVersion": "1.0", "generatedAt": ..., "source": {...},
-     "epics": [{"id": "EP-CLAIM", "title", "module", "description", "businessOutcome", "labels", "narrativeSource",
-                "features": [{"id": "FT-SIR-001", "title", "description", "sirId", "stateMachine",
-                              "sideEffects", "inputs", "labels", "narrativeSource",
-                              "stories": [{"id": "US-SIR-001-01", "type": "functional|flow|enabler", "title",
+     "epics": [{"id": "EP-INVOICE", "title", "module", "description", "businessOutcome", "labels", "narrativeSource",
+                "features": [{"id": "FT-INVOICE-SOA", "title", "description", "sirIds", "labels", "narrativeSource",
+                              "stories": [{"id": "US-SIR-002", "type": "functional", "title",
                                            "narrative": {"asA", "iWant", "soThat"}, "description",
-                                           "acceptanceCriteria": ["Scenario: ..."], "storyPoints", "priority",
-                                           "labels", "narrativeSource": "template|refined",
-                                           "trustBoundary", "classification",
+                                           "acceptanceCriteria": ["Given ..., when ..., then ... (R1, R2)"],
+                                           "storyPoints", "priority", "labels", "narrativeSource": "template|refined",
+                                           "behaviour", "estimation", "trustBoundary", "classification",
                                            "trace": {"sirId", "ruleId", "ruleIds", "legacyLines", "snippet",
                                                      "astNode"}}]}]}],
      "openQuestions": [{"id", "storyId", "question"}]}
@@ -47,15 +47,11 @@ def iter_stories(backlog: dict) -> Iterator[tuple[dict, dict, dict]]:
 
 def counts(backlog: dict) -> dict:
     stories = [s for _, _, s in iter_stories(backlog)]
-    ai = sum(s.get("storyPoints") or 0 for s in stories)
-    human = sum((s.get("estimation") or {}).get("humanPoints", s.get("storyPoints") or 0) for s in stories)
     return {
         "epics": len(backlog.get("epics", [])),
         "features": sum(1 for _ in iter_features(backlog)),
         "stories": len(stories),
-        "storyPoints": ai,                 # AI-assisted points: what the team plans with
-        "humanPoints": human,              # manual (no-AI) baseline
-        "aiEfficiency": round(1 - ai / human, 2) if human else 0.0,
+        "storyPoints": sum(s.get("storyPoints") or 0 for s in stories),   # sized on business complexity
         "refined": sum(1 for s in stories if s.get("narrativeSource") == "refined"),
         "template": sum(1 for s in stories if s.get("narrativeSource") != "refined"),
         "openQuestions": len(backlog.get("openQuestions", [])),
@@ -69,6 +65,12 @@ def snap_points(value) -> int:
     except (TypeError, ValueError):
         return 3
     return min((f for f in FIBONACCI if f <= MAX_POINTS), key=lambda f: (abs(f - v), f))
+
+
+def is_criterion(text) -> bool:
+    """One acceptance criterion: a single 'Given ..., when ..., then ...' line (Gherkin 'Scenario:' also accepted)."""
+    t = str(text).strip().lower()
+    return t.startswith(("scenario:", "scenario outline:")) or (t.startswith("given ") and " then " in t)
 
 
 def slug(text: str) -> str:
@@ -117,9 +119,12 @@ def validate(backlog: dict) -> list[tuple[str, str]]:
                 ac = story.get("acceptanceCriteria") or []
                 if not ac:
                     out.append(("ERROR", f"{sid}: no acceptance criteria"))
+                elif len(ac) > SPLIT_ADVISED:
+                    out.append(("WARN", f"{sid}: {len(ac)} acceptance criteria; consider splitting into smaller stories"))
                 for i, a in enumerate(ac, 1):
-                    if not str(a).lstrip().startswith(("Scenario:", "Scenario Outline:")):
-                        out.append(("ERROR", f"{sid}: acceptance criterion {i} must start with 'Scenario:'"))
+                    if not is_criterion(a):
+                        out.append(("ERROR", f"{sid}: acceptance criterion {i} must read 'Given ..., when ..., "
+                                             "then ...'"))
                 pts = story.get("storyPoints")
                 if pts not in FIBONACCI:
                     out.append(("ERROR", f"{sid}: storyPoints {pts!r} is not a Fibonacci size"))
@@ -128,12 +133,9 @@ def validate(backlog: dict) -> list[tuple[str, str]]:
                 elif pts > SPLIT_ADVISED:
                     out.append(("WARN", f"{sid}: {pts} points; consider splitting into smaller stories"))
                 est = story.get("estimation") or {}
-                if isinstance(pts, int) and est.get("humanOnly") and pts < est["humanOnly"]:
-                    out.append(("ERROR", f"{sid}: storyPoints {pts} is below the human-only effort "
-                                         f"{est['humanOnly']} (SME/DBA answers, sign-off)"))
-                if isinstance(pts, int) and est.get("humanPoints") and pts > est["humanPoints"]:
-                    out.append(("WARN", f"{sid}: AI-assisted storyPoints {pts} exceed the manual baseline "
-                                        f"{est['humanPoints']}"))
+                if isinstance(pts, int) and est.get("points") and pts < est["points"] and "manualPoints" not in est:
+                    out.append(("ERROR", f"{sid}: storyPoints {pts} is below its business-complexity estimate "
+                                         f"{est['points']}"))
                 if story.get("priority") not in PRIORITIES:
                     out.append(("ERROR", f"{sid}: priority must be one of {PRIORITIES}"))
                 if story.get("narrativeSource") not in NARRATIVE_SOURCES:
@@ -152,118 +154,69 @@ def validate(backlog: dict) -> list[tuple[str, str]]:
 
 
 # --------------------------------------------------------------------------- renderers
+# A story is rendered as the user story only: its title ("As a ..., I want ... so that ..."), description,
+# acceptance criteria (one 'Given ..., when ..., then ...' line each), labels, story points and the epic /
+# feature it belongs to. Legacy trace and the estimation breakdown stay in backlog.json but are not rendered.
 
-def _narrative(story: dict) -> str:
-    n = story.get("narrative") or {}
-    return f"As a {n.get('asA', '')}, I want {n.get('iWant', '')}, so that {n.get('soThat', '')}."
+def _belongs_to(epic: dict | None, feature: dict | None) -> str:
+    return " › ".join(x["title"] for x in (epic, feature) if x)
+
+
+def _story_lines(s: dict, epic: dict | None, feature: dict | None, heading: str) -> list[str]:
+    lines = []
+    if s.get("description"):
+        lines += [s["description"], ""]
+    lines += [f"**Story points:** {s.get('storyPoints')}  ", f"**Epic / Feature:** {_belongs_to(epic, feature)}"]
+    if s.get("labels"):
+        lines[-1] += "  "
+        lines.append(f"**Labels:** {', '.join(s['labels'])}")
+    lines += ["", heading.format("Acceptance criteria"), ""] + [f"- {a}" for a in s.get("acceptanceCriteria", [])]
+    return lines
 
 
 def backlog_markdown(backlog: dict) -> str:
     c = counts(backlog)
     lines = [f"# Backlog: {', '.join(e['title'] for e in backlog.get('epics', [])) or 'empty'}", "",
              f"{c['epics']} epic(s) · {c['features']} feature(s) · {c['stories']} stories · "
-             f"{c['storyPoints']} AI-assisted points (manual baseline {c['humanPoints']}, "
-             f"{round(c['aiEfficiency'] * 100)}% AI efficiency) · {c['refined']} refined / {c['template']} template", ""]
-    model = backlog.get("estimationModel")
-    if model:
-        lines += [f"*Estimation: team AI capability {model['capability']}"
-                  f"{' (assumed, see Q-EST-01)' if model.get('assumed') else ''}. Story points are AI-assisted; "
-                  "the manual baseline is shown per story.*", ""]
+             f"{c['storyPoints']} story points", "",
+             "*Story points are sized on business complexity (business rules, process scope, business "
+             "uncertainty), not on technical details.*", ""]
     for epic in backlog.get("epics", []):
-        lines += [f"## Epic {epic['id']}: {epic['title']}", ""]
-        if epic.get("businessOutcome"):
-            lines += [f"**Business outcome:** {epic['businessOutcome']}", ""]
-        if epic.get("description"):
-            lines += [epic["description"], ""]
-        if epic.get("approach"):
-            lines += [f"**Approach:** {epic['approach']}", ""]
+        lines += [f"## Epic: {epic['title']}", ""]
         for feature in epic.get("features", []):
-            lines += [f"### Feature {feature['id']}: {feature['title']}", ""]
-            if feature.get("description"):
-                lines += [feature["description"], ""]
-            if feature.get("definitionOfDone"):
-                lines += ["**Definition of done**", ""] + [f"- {d}" for d in feature["definitionOfDone"]] + [""]
+            lines += [f"### Feature: {feature['title']}", ""]
             for s in feature.get("stories", []):
-                lines += [f"#### {s['id']}: {s['title']}",
-                          f"*{s.get('type')} · {s.get('storyPoints')} pts · {s.get('priority')} · "
-                          f"{s.get('narrativeSource')}*", "", _narrative(s), ""]
-                if s.get("description"):
-                    lines += [s["description"], ""]
-                est = s.get("estimation")
-                if est and "humanPoints" in est:
-                    lines += [f"*AI-assisted {est['aiPoints']} pts vs manual {est['humanPoints']} pts "
-                              f"({round(est['aiEfficiency'] * 100)}% AI efficiency)"
-                              f"{'. ' + '; '.join(est['notes']) if est.get('notes') else ''}*", ""]
-                if est and "complexity" in est:
-                    lines += ["| Factor | Level | Evidence |", "|---|---|---|"]
-                    for key, label in (("complexity", "Complexity"), ("work", "Amount of work"),
-                                       ("risk", "Risk & uncertainty")):
-                        f = est[key]
-                        lines.append(f"| {label} | {f['level']} ({f['label']}) | {'; '.join(f['evidence'])} |")
-                    lines += ["", f"*Sum {est['factorSum']} → {est['humanPoints']} pts manual. {est['reference']}. "
-                                  f"Confidence: {est['confidence']}.*", ""]
-                    if est.get("inputsNeeded"):
-                        lines += ["**Inputs needed to size it:** " + "; ".join(est["inputsNeeded"]), ""]
-                lines += ["**Acceptance criteria**", "", "```gherkin"]
-                for a in s.get("acceptanceCriteria", []):
-                    lines += [a, ""]
-                lines[-1:] = ["```"]
-                t = s.get("trace") or {}
-                lines += ["", f"Trace: `{t.get('sirId')}` rule `{t.get('ruleId')}` · legacy `{t.get('legacyLines')}`"
-                              f" · `{t.get('astNode')}`", ""]
+                lines += [f"#### {s['id']}: {s['title']}", ""] + _story_lines(s, epic, feature, "**{}**") + [""]
     if backlog.get("openQuestions"):
+        titles = {s["id"]: s["title"] for _, _, s in iter_stories(backlog)}
         lines += ["## Open questions", ""]
-        lines += [f"- **{q.get('storyId') or 'general'}**: {q['question']}" for q in backlog["openQuestions"]]
+        lines += [f"- **{titles.get(q.get('storyId')) or 'General'}**: {q['question']}" for q in backlog["openQuestions"]]
     return "\n".join(lines).rstrip() + "\n"
 
 
-def story_html(story: dict) -> str:
-    """HTML body used by Azure DevOps (description field)."""
-    t = story.get("trace") or {}
+def story_html(story: dict, epic: dict | None = None, feature: dict | None = None) -> str:
+    """HTML body used by Azure DevOps (description field). Story points, labels and AC have their own fields."""
     e = html.escape
-    parts = [f"<p>{e(_narrative(story))}</p>"]
-    if story.get("description"):
-        parts.append(f"<p>{e(story['description'])}</p>")
-    parts.append("<p><b>Legacy trace</b><br/>" + e(f"{t.get('sirId')} / {t.get('ruleId')} / {t.get('legacyLines')} / "
-                                                   f"{t.get('astNode')}") + "</p>")
-    if t.get("snippet"):
-        parts.append(f"<pre>{e(t['snippet'])}</pre>")
+    parts = [f"<p>{e(story['description'])}</p>"] if story.get("description") else []
+    if epic or feature:
+        parts.append(f"<p><b>Epic / Feature:</b> {e(_belongs_to(epic, feature))}</p>")
     return "".join(parts)
 
 
 def acceptance_html(story: dict) -> str:
-    return "".join(f"<pre>{html.escape(a)}</pre>" for a in story.get("acceptanceCriteria", []))
+    return "<ul>" + "".join(f"<li>{html.escape(a)}</li>" for a in story.get("acceptanceCriteria", [])) + "</ul>"
 
 
 def item_markdown(item: dict) -> str:
     """Markdown body for GitHub / Bitbucket issues."""
     lines: list[str] = []
     if item["level"] == "story":
-        s = item["story"]
-        t = s.get("trace") or {}
-        lines += [_narrative(s), ""]
-        if s.get("description"):
-            lines += [s["description"], ""]
-        lines += ["### Acceptance criteria", "", "```gherkin"]
-        for a in s.get("acceptanceCriteria", []):
-            lines += [a, ""]
-        lines[-1:] = ["```", "", "### Legacy trace",
-                      f"- SIR `{t.get('sirId')}` · rule `{t.get('ruleId')}`",
-                      f"- Legacy lines: `{t.get('legacyLines')}` · AST node `{t.get('astNode')}`"]
-        if t.get("snippet"):
-            lines += ["", "```", t["snippet"], "```"]
-        lines += ["", f"_{s.get('storyPoints')} story points · {s.get('priority')}_"]
+        lines += _story_lines(item["story"], item.get("epic"), item.get("feature"), "### {}")
     else:
         src = item["epic"] if item["level"] == "epic" else item["feature"]
-        lines += [src.get("description") or src.get("title", "")]
-        if src.get("businessOutcome"):
-            lines += ["", f"**Business outcome:** {src['businessOutcome']}"]
+        lines += [src.get("title", "")]
         if item["level"] == "feature":
-            f = item["feature"]
-            if f.get("stateMachine"):
-                lines += ["", f"State flow: `{f['stateMachine']}`"]
-            for fx in f.get("sideEffects", []):
-                lines += [f"- {fx}"]
+            lines += ["", f"**Epic:** {item['epic']['title']}"]
     lines += ["", f"<!-- backlog-id: {item['id']} -->"]
     return "\n".join(lines)
 
@@ -294,27 +247,18 @@ def adf(item: dict) -> dict:
     doc: list[dict] = []
     if item["level"] == "story":
         s = item["story"]
-        t = s.get("trace") or {}
-        doc += [_adf_p(_narrative(s))]
         if s.get("description"):
             doc.append(_adf_p(s["description"]))
-        doc.append(_adf_h("Acceptance criteria"))
-        doc += [_adf_code(a, "gherkin") for a in s.get("acceptanceCriteria", [])]
-        doc += [_adf_h("Legacy trace"),
-                _adf_p(f"SIR {t.get('sirId')} · rule {t.get('ruleId')} · {t.get('legacyLines')} · {t.get('astNode')}")]
-        if t.get("snippet"):
-            doc.append(_adf_code(t["snippet"]))
+        doc += [_adf_p(f"Story points: {s.get('storyPoints')}"),
+                _adf_p(f"Epic / Feature: {_belongs_to(item.get('epic'), item.get('feature'))}"),
+                _adf_h("Acceptance criteria"),
+                {"type": "bulletList", "content": [{"type": "listItem", "content": [_adf_p(a)]}
+                                                   for a in s.get("acceptanceCriteria", [])]}]
     else:
         src = item["epic"] if item["level"] == "epic" else item["feature"]
-        doc.append(_adf_p(src.get("description") or src.get("title", "")))
-        if src.get("businessOutcome"):
-            doc.append(_adf_p(f"Business outcome: {src['businessOutcome']}"))
+        doc.append(_adf_p(src.get("title", "")))
         if item["level"] == "feature":
-            f = item["feature"]
-            if f.get("stateMachine"):
-                doc.append(_adf_code(f["stateMachine"]))
-            for fx in f.get("sideEffects", []):
-                doc.append(_adf_p(f"• {fx}"))
+            doc.append(_adf_p(f"Epic: {item['epic']['title']}"))
     doc.append(_adf_p(f"backlog-id: {item['id']}"))
     return {"type": "doc", "version": 1, "content": doc}
 
@@ -323,13 +267,13 @@ def jira_wiki(item: dict) -> str:
     """Jira Server/DC wiki-markup description."""
     if item["level"] != "story":
         src = item["epic"] if item["level"] == "epic" else item["feature"]
-        return f"{src.get('description') or src.get('title', '')}\n\nbacklog-id: {item['id']}"
+        return f"{src.get('title', '')}\n\nbacklog-id: {item['id']}"
     s = item["story"]
-    t = s.get("trace") or {}
-    body = [_narrative(s), "", "h3. Acceptance criteria"]
-    body += [f"{{code}}\n{a}\n{{code}}" for a in s.get("acceptanceCriteria", [])]
-    body += ["h3. Legacy trace", f"{t.get('sirId')} / {t.get('ruleId')} / {t.get('legacyLines')}",
-             f"\nbacklog-id: {item['id']}"]
+    body = ([s["description"], ""] if s.get("description") else []) + [
+        f"*Story points:* {s.get('storyPoints')}",
+        f"*Epic / Feature:* {_belongs_to(item.get('epic'), item.get('feature'))}", "", "h3. Acceptance criteria"]
+    body += [f"* {a}" for a in s.get("acceptanceCriteria", [])]
+    body += [f"\nbacklog-id: {item['id']}"]
     return "\n".join(body)
 
 

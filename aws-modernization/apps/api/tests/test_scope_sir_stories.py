@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -151,12 +152,17 @@ def test_sir_scaffold_is_ast_anchored(eng):
     assert write["legacyLines"] == "App/Controllers/OrderController.cs#L12"
     assert "Uow.Orders.Add(model)" in write["snippet"]
     assert write["trustBoundary"].startswith("Deterministic")
-    guards = [r for r in c["rules"] if r["astNode"].endswith(":BRANCH")]
-    assert len(guards) == 1, "a method's branches are the conditions of ONE validation rule, not a rule each"
-    guard = guards[0]
-    assert "model.Total > 500" in guard["statement"]
-    assert any("model.Total > 500" in cond for cond in guard["conditions"])
-    assert len(guard["conditionLines"]) == len(guard["conditions"])
+    # C#: each decision is a rule with its condition AND its outcome, anchored to the line of the outcome
+    decisions = [r for r in c["rules"] if r["astNode"].endswith(":DECIDES")]
+    assert [(d["logic"]["when"], d["logic"]["then"]) for d in decisions] == [
+        ([{"code": "model.Total > 500", "negated": False}], [{"type": "throw", "message": "Order total exceeds limit 500"}]),
+        ([{"code": "model.Total > 500", "negated": True}],      # after the guard clause: only when it passed
+         [{"type": "data", "op": "add", "entity": "Orders", "args": ["model"]}])]
+    assert decisions[0]["legacyLines"] == "App/Controllers/OrderController.cs#L10"
+    assert 'throw new Exception("Order total exceeds limit 500")' in decisions[0]["snippet"]
+    assert decisions[0]["trustBoundary"].startswith("Deterministic")
+    assert not [r for r in c["rules"] if r["astNode"].endswith(":BRANCH")], "decisions replace the bare condition list"
+    assert c["businessLogic"]["entry"] == "Create"
     plumbing = next(r for r in c["rules"] if "SaveChanges" in r["statement"])
     assert plumbing["kind"] == "legacy_plumbing_pruned"
     assert c["stateMachine"].startswith("RECEIVE_REQUEST -> ") and c["stateMachine"].endswith("COMPLETE")
@@ -209,42 +215,40 @@ def test_backlog_scaffold_covers_every_rule_and_validates(eng):
     us = out["userStories"]
     backlog, sir = us["backlog"], eng["seed"]["semantic_ir"][0]
     stories = [s for _, _, s in user_stories.bm.iter_stories(backlog)]
-    functional = [s for s in stories if s["type"] == "functional"]
-    business = [r for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"]
-    covered = [rid for s in functional for rid in s["trace"]["ruleIds"]]
-    assert sorted(covered) == sorted(r["ruleId"] for r in business), "every rule is covered exactly once"
-    assert len(functional) <= len(business), "stories are per behaviour (legacy method), not per branch"
-    for s in functional:   # each rule is an acceptance scenario, plus one parity scenario
-        assert len(s["acceptanceCriteria"]) == len(s["trace"]["ruleIds"]) + 1 <= 8
-    assert {s["type"] for s in stories} == {"functional", "flow", "enabler"}
+    business = [r["ruleId"] for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"]
+    assert [s["id"] for s in stories] == [f"US-{sir['id']}"], "one story per use case"
+    story = stories[0]
+    assert story["trace"]["ruleIds"] == business, "every business rule is traced, plumbing is not"
+    assert user_stories.cited_rules(story["acceptanceCriteria"]) == {user_stories.sts.short_id(r) for r in business}
+    assert len(story["acceptanceCriteria"]) <= user_stories.sts.MAX_CRITERIA
+    assert [f["title"] for _, f in user_stories.bm.iter_features(backlog)] == ["Order"], "feature = business area"
     assert not [i for i in us["validation"] if i["level"] == "ERROR"]
-    assert all(s["narrativeSource"] == "template" for s in stories)
+    assert story["narrativeSource"] == "template"
     for f in ("backlog.json", "backlog.md", "sir.json", "scripts/push_backlog.py"):
         assert (store.engagement_dir("eng1") / "artifacts" / "user-stories" / f).is_file()
 
 
 def test_llm_refinement_keeps_trace_and_rejects_dropped_literals(eng, monkeypatch):
     eng = _with_sir(eng)
-    guard_story = {}
+    seen_views = []
 
     def fake(system, user, **kw):
         if "EPIC" in system:
             return ({"title": "Order Management", "description": "Orders are captured.",
                      "businessOutcome": "Faster order intake.", "persona": "sales clerk"}, "m")
         view = json.loads(user.split("INPUT:\n", 1)[1])
-        stories = []
-        for s in view["stories"]:
-            rule = s["rule"]
-            ac = ["Scenario: Order within the limit\n  Given an order totalling 100\n  When it is submitted\n  Then it is stored"]
-            if rule.get("statement", "").startswith("Persists changes"):   # deterministic core, no literal to keep
-                ac = ["Scenario: Order stored\n  Given a valid order\n  When it is submitted\n  Then it is persisted"]
-            stories.append({"id": s["id"], "title": "Refined " + s["id"], "narrative": {
-                "asA": "sales clerk", "iWant": "to submit orders", "soThat": "customers are served"},
-                "description": "d", "acceptanceCriteria": ac, "storyPoints": 13, "priority": "Must",
-                "labels": ["ok-label", "bad label!"], "trace": {"ruleId": "HACKED"}})
-            if "Branches on" in (rule.get("statement") or ""):
-                guard_story["id"] = s["id"]
-        return ({"feature": {"title": "Place order", "description": "Order placement."}, "stories": stories,
+        seen_views.append(view)
+        stories = [{"id": s["id"], "title": "ignored", "narrative": {
+            "asA": "sales clerk", "iWant": "to place an order", "soThat": "the customer is served"},
+            "description": "The clerk places an order.",
+            "acceptanceCriteria": [
+                'Given an order over 500, when it is placed, then it is refused with "Order total exceeds limit 500" (R1)',
+                "Given a valid order, when it is placed, then it is stored (R2)",
+                "Given the same order in the current and the new system, when both complete, then the result is "
+                "identical (R1-R4)"],
+            "storyPoints": 13, "priority": "Must", "labels": ["ordering", "bad label!"], "trace": {"ruleId": "HACKED"}}
+            for s in view["stories"]]
+        return ({"feature": {"title": "Ordering", "description": "Order placement."}, "stories": stories,
                  "openQuestions": [{"storyId": None, "question": "Is 500 inclusive?"}]}, "m")
 
     monkeypatch.setattr(user_stories, "ask_json", fake)
@@ -252,55 +256,209 @@ def test_llm_refinement_keeps_trace_and_rejects_dropped_literals(eng, monkeypatc
     us = out["userStories"]
     backlog = us["backlog"]
     assert backlog["epics"][0]["title"] == "Order Management"
-    assert backlog["epics"][0]["businessOutcome"] == "Faster order intake."
-    stories = {s["id"]: s for _, _, s in user_stories.bm.iter_stories(backlog)}
+    story = next(user_stories.bm.iter_stories(backlog))[2]
     sir = eng["seed"]["semantic_ir"][0]
-    traced = sorted(r for s in stories.values() if s["type"] == "functional" for r in s["trace"]["ruleIds"])
-    assert traced == sorted(r["ruleId"] for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"), \
-        "LLM output cannot change the trace"
-    assert max(s["storyPoints"] for s in stories.values()) <= 8
-    assert all("bad label!" not in s["labels"] for s in stories.values())
-    refined = [s for s in stories.values() if s["narrativeSource"] == "refined"]
-    assert refined and us["refinement"]["status"] in ("llm", "partial")
+    assert story["trace"]["ruleIds"] == [r["ruleId"] for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"]
+    assert story["title"] == "As a sales clerk, I want to place an order so that the customer is served"
+    base = story["estimation"]["points"]
+    assert story["storyPoints"] == next(f for f in user_stories.bm.FIBONACCI if f > base), "one step up at most"
+    assert story["labels"] == ["ordering", "reference-story"] or story["labels"] == ["ordering"]
+    assert story["narrativeSource"] == "refined" and us["refinement"]["status"] == "llm"
     assert any("Is 500 inclusive?" == q["question"] for q in backlog["openQuestions"])
+    rules = seen_views[0]["stories"][0]["rules"]   # the model sees short ids, rule kinds and each decision's meaning
+    assert [r["id"] for r in rules] == ["R1", "R2", "R3", "R4"]
+    assert [r["kind"] for r in rules] == ["decision", "decision", "write", "read"]
+    assert rules[0]["meaning"] == 'if the total is more than 500, the message "Order total exceeds limit 500" is shown'
+    assert rules[1]["meaning"] == "if the total is at most 500, the order is added"
 
 
 def test_literal_guard_rejects_rewrite_that_drops_a_number():
     story = {"title": "t", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
-             "acceptanceCriteria": ["Scenario: x"], "storyPoints": 3, "priority": "Must", "labels": [],
-             "narrativeSource": "template"}
-    rule = {"statement": "Reject orders over 500", "snippet": "", "trustBoundary": "Deterministic Core (x)"}
-    upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
-           "acceptanceCriteria": ["Scenario: large orders\n  Then they are rejected"], "storyPoints": 3}
+             "acceptanceCriteria": ["Given x, when y, then z (R1)"], "storyPoints": 3, "priority": "Must",
+             "labels": [], "narrativeSource": "template"}
+    rule = {"ruleId": "S.R1", "statement": "Reject orders over 500", "snippet": "",
+            "trustBoundary": "Deterministic Core (x)"}
+    upd = {"narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
+           "acceptanceCriteria": ["Given a large order, when it is placed, then it is rejected (R1)"], "storyPoints": 3}
     assert "500" in user_stories._apply_story(dict(story), upd, rule)
     assert story["narrativeSource"] == "template"
-    upd["acceptanceCriteria"] = ["Scenario: large orders\n  Then orders over 500 are rejected"]
+    upd["acceptanceCriteria"] = ["Given an order over 500, when it is placed, then it is rejected (R1)"]
     s2 = dict(story)
     assert user_stories._apply_story(s2, upd, rule) is None and s2["narrativeSource"] == "refined"
-    # a behaviour story groups several rules: the guard checks every core rule, not just the first one
-    plain = {"ruleId": "R1", "statement": "Branches on x", "snippet": "", "trustBoundary": "Application Logic"}
-    upd["acceptanceCriteria"] = ["Scenario: large orders\n  Then they are rejected"]
+    # a story groups several rules: the guard checks every core rule, not just the first one
+    plain = {"ruleId": "S.R2", "statement": "Branches on x", "snippet": "", "trustBoundary": "Application Logic"}
+    upd["acceptanceCriteria"] = ["Given a large order, when it is placed, then it is rejected (R1, R2)"]
     assert "500" in user_stories._apply_story(dict(story), upd, [plain, rule])
 
 
-def test_rules_of_one_legacy_method_become_one_story():
+def test_rewrite_that_drops_a_rule_is_rejected():
+    story = {"title": "t", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
+             "acceptanceCriteria": ["Given x, when y, then z (R1-R4)"], "storyPoints": 3, "priority": "Must",
+             "labels": [], "narrativeSource": "template"}
+    rules = [{"ruleId": f"S.R{i}", "statement": "Persists changes to Order", "trustBoundary": "x"} for i in range(1, 5)]
+    upd = {"narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
+           "acceptanceCriteria": ["Given an order, when it is placed, then it is stored (R1, R2)"]}
+    assert user_stories._apply_story(dict(story), upd, rules) == "acceptance criteria do not cover rule(s) R3, R4"
+    upd["acceptanceCriteria"] = ["Given an order, when it is placed, then it is stored (R1, R2–R4)"]
+    assert user_stories._apply_story(dict(story), upd, rules) is None, "ranges with an en dash count"
+    upd["acceptanceCriteria"] = ["Given an order, when it is placed, then it is stored (R1-R4)"]
+    assert user_stories._apply_story(dict(story), upd, rules) is None, "ranges with a hyphen count"
+
+
+def _rule(n, cls, stmt, node, **extra):
+    return {"ruleId": f"SIR-007.R{n}", "kind": "deterministic_business_rule", "classification": cls,
+            "statement": stmt, "astNode": node, "trustBoundary": extra.pop("tb", "Application Logic"),
+            "legacyLines": f"A.cs#L{n}", "snippet": "", **extra}
+
+
+def _invoice_post():
+    """Shaped like the real 'Invoice: Post' contract: checks, writes in helper methods, email, internal calls."""
+    return {"id": "SIR-007", "module": "invoice", "name": "Invoice: Post", "summary": "x",
+            "sideEffects": ["Persists changes to Invoice"], "inputs": [{"name": "model"}],
+            "legacyAssessment": {"regressionScope": ["Invoice: Edit"], "factors": []},
+            "rules": [
+                _rule(1, "Validation / Control Flow", "Validates the request before processing: ...",
+                      "AST:InvoiceApiController.Post:L50:BRANCH",
+                      conditions=["if (model.Particulars.Count > 1)", 'if (model.Status == "pending")',
+                                  "if (entity.Id == 0)"]),
+                _rule(2, "State Mutation", "Persists changes to Invoice", "AST:InvoiceApiController.CreateNew:L9:WRITES",
+                      tb="Deterministic Core (x)"),
+                _rule(3, "State Mutation", "Persists changes to Particular", "AST:InvoiceApiController.Save:L9:WRITES",
+                      tb="Deterministic Core (x)"),
+                _rule(4, "External Integration", "Calls external dependency SmtpClient",
+                      "AST:EmailService.Send:L24:INVOKES_EXTERNAL"),
+                _rule(5, "Orchestration", "Delegates to InvoiceApiController.GetInvoiceStatusId",
+                      "AST:InvoiceApiController.Post:L46:CALLS"),
+                _rule(6, "Orchestration", "Delegates to InvoiceApiController.GetParticularTypeId",
+                      "AST:InvoiceApiController.Post:L48:CALLS"),
+                _rule(7, "Legacy Plumbing", "Infrastructure call ApplicationUnit.SaveChanges",
+                      "AST:InvoiceApiController.Post:L60:CALLS", kind="legacy_plumbing_pruned")]}
+
+
+def test_one_story_per_use_case_in_business_language():
     sts = user_stories.sts
-    rules = [{"ruleId": f"S.R{i}", "statement": f"Branches on c{i}", "snippet": f"if (c{i})",
-              "classification": "Validation / Control Flow", "trustBoundary": "Application Logic",
-              "legacyLines": f"A.cs#L{i}", "astNode": f"AST:Ctl.Save:L{i}:BRANCH"} for i in range(1, 9)]
-    rules.append({"ruleId": "S.R9", "statement": "Lists items", "snippet": "db.Items.ToList()",
-                  "classification": "Data Retrieval", "trustBoundary": "Application Logic",
-                  "legacyLines": "A.cs#L90", "astNode": "AST:Ctl.Index:L90:CALL"})
-    groups = sts.group_rules(rules)
-    # branches are conditions of one behaviour, never stories (or split triggers) of their own
-    assert [(n, len(c)) for n, c in groups] == [("Ctl.Save", 8), ("Ctl.Index", 1)]
-    ops = [{"ruleId": f"S.W{i}", "statement": f"Persists changes to T{i}", "classification": "State Mutation",
-            "trustBoundary": "Deterministic Core (x)", "astNode": f"AST:Ctl.Save:L{20 + i}:WRITES"} for i in range(8)]
-    groups = sts.group_rules(rules + ops)
-    assert [(n, len(c)) for n, c in groups] == [("Ctl.Save (part 1 of 2)", 8 + 6), ("Ctl.Save (part 2 of 2)", 2),
-                                                ("Ctl.Index", 1)]
-    story = sts._behaviour_story({"id": "S"}, groups[0][0], groups[0][1], 1, "clerk")
-    assert len(story["acceptanceCriteria"]) == 1 + 6 + 1, "one validation scenario + one per operation + parity"
+    sir = _invoice_post()
+    backlog = sts.build_backlog([sir], module_names={"invoice": "Invoice"})
+    (_, feature, story), = list(user_stories.bm.iter_stories(backlog))
+    assert feature["title"] == "Invoice" and story["behaviour"] == "Invoice: Post"
+    assert story["title"] == ("As a business user, I want to create an invoice so that the invoice and particular "
+                              "records are saved and the right people are notified by email")
+    ac = story["acceptanceCriteria"]
+    assert ac[:5] == [   # every business check is named, one criterion each
+        "Given there is more than 1 particular, when the invoice is submitted, then the outcome is the same as today (R1)",
+        'Given the status is "pending", when the invoice is submitted, then the outcome is the same as today (R1)',
+        "Given the invoice has not been saved yet, when the invoice is submitted, then the outcome is the same as "
+        "today (R1)",
+        "Given a new invoice that passes every check, when the invoice is submitted, then the invoice and particular "
+        "records are saved (R2–R3)",
+        "Given a new invoice that passes every check, when the invoice is submitted, then an email notification is "
+        "sent (R4)"]
+    assert "Invoice: Edit" in ac[5] and ac[6].endswith("then the result is identical (R1–R6)") and len(ac) == 7
+    assert ('Business checks, applied exactly as today: there is more than 1 particular; the status is "pending"; '
+            "the invoice has not been saved yet.") in story["description"]
+    text = " ".join([story["title"], story["description"], *ac])
+    assert not re.search(r"\b\d+ business checks?\b", text), "checks are named, never just counted"
+    for code in ("Delegates", "Controller", "GetInvoiceStatusId", "SmtpClient", "model.", "if (", "SIR-007"):
+        assert code not in text, f"technical detail leaked: {code}"
+    assert story["labels"][:3] == ["invoice", "create", "notification"]   # + "reference-story": the only story
+    assert story["trace"]["ruleIds"] == [f"SIR-007.R{i}" for i in range(1, 7)], "plumbing (R7) is not traced"
+
+
+def test_technical_only_use_cases_produce_no_story():
+    sts = user_stories.sts
+    wiring = {"id": "SIR-001", "module": "platform", "name": "ApplicationUnit", "rules": [
+        _rule(i, "Orchestration", f"Calls {name}", f"AST:ApplicationUnit:L{i}:CALLS")
+        for i, name in enumerate(["DataContext", "ClaimRepository", "ClientRepository"], 1)]}
+    with pytest.raises(ValueError, match="only technical code"):
+        sts.build_backlog([wiring])
+    backlog = sts.build_backlog([wiring, _invoice_post()])
+    assert [s["id"] for _, _, s in user_stories.bm.iter_stories(backlog)] == ["US-SIR-007"]
+
+
+def test_same_action_twice_raises_a_question_and_reads_are_shown():
+    sts = user_stories.sts
+    api, page = _invoice_post(), _invoice_post()
+    page.update(id="SIR-008", name="Invoice: Create")
+    view = {"id": "SIR-009", "module": "invoice", "name": "Soa: Details", "rules": [
+        _rule(1, "Validation / Control Flow", "Validates ...", "AST:SoaController.Details:L1:BRANCH",
+              conditions=["if (vm == null)", "return HttpNotFound();"]),
+        _rule(2, "Data Retrieval", "Reads Soa", "AST:SoaController.Details:L2:READS"),
+        _rule(3, "Data Retrieval", "Reads SoaStatus", "AST:SoaController.Details:L3:READS")]}
+    backlog = sts.build_backlog([api, page, view], module_names={"invoice": "Invoice"})
+    dup = [q for q in backlog["openQuestions"] if q["id"].startswith("Q-DUP")]
+    assert len(dup) == 1 and dup[0]["storyId"] == "US-SIR-008"
+    assert '"Invoice: Post" and "Invoice: Create" both let the user create an invoice' in dup[0]["question"]
+    assert [f["title"] for _, f in user_stories.bm.iter_features(backlog)] == ["Invoice", "SOA"]
+    soa = next(s for _, _, s in user_stories.bm.iter_stories(backlog) if s["id"] == "US-SIR-009")
+    assert soa["title"] == ("As a business user, I want to view the details of an SOA so that I can review the SOA "
+                            "information"), "lookups such as SoaStatus are not business information"
+    assert soa["acceptanceCriteria"] == [   # the check and what it does when it fails, read from the code
+        'Given the SOA is not found, when the user opens the SOA, then a "not found" page is shown (R1)',
+        "Given an existing SOA, when the user opens the SOA, then the SOA information is shown (R2–R3)",
+        "Given the same request is made in the current and the new system, when both complete, then the result is "
+        "identical (R1–R3)"]
+    assert "read-only" in soa["labels"]
+
+
+def test_many_checks_are_listed_on_one_line_when_they_do_not_fit():
+    sir = _invoice_post()
+    sir["rules"][0]["conditions"] = [f"if (model.Amount{i} > {i})" for i in range(1, 17)]   # more than fit
+    story = next(user_stories.bm.iter_stories(user_stories.sts.build_backlog([sir])))[2]
+    first = story["acceptanceCriteria"][0]
+    assert first.startswith("Given a new invoice, when the invoice is submitted, then these checks are applied "
+                            "exactly as today: the amount 1 is more than 1; the amount 2 is more than 2;")
+    assert first.endswith("the amount 16 is more than 16 (R1)")
+    assert len(story["acceptanceCriteria"]) <= user_stories.sts.MAX_CRITERIA
+
+
+# every distinct check found in the real engagements, and its wording
+REAL_CHECKS = [
+    ("invoice", "if (model.Particulars.Count > 1)", "there is more than 1 particular"),
+    ("invoice", "if (particularVAT.ParticularTypeId == 0)", "the particular type of the particular VAT is not set"),
+    ("invoice", "if (entity.Id == 0)", "the invoice has not been saved yet"),
+    ("invoice", "if (CreateNewInvoice(entity) == false)", "creating the new invoice fails"),
+    ("invoice", "if (SaveModifications(entity) == false)", "saving the modifications fails"),
+    ("SOA", 'if (model.StatusName.ToLower() == "unpaid")', 'the status is "unpaid"'),
+    ("invoice", "switch (model.InvoiceAction)", "the invoice action decides what happens"),
+    ("invoice", "if (model.InvoiceAction == InvoiceActionEnum.Paid)", 'the invoice action is "Paid"'),
+    ("invoice", "if (ModelState.IsValid == false)", "the entered details are not valid"),
+    ("invoice", "if (list == null || list.Count <= 0)", "the list is empty"),
+    ("invoice", "if (list[0].IsApprove)", 'the first item is marked "approve"'),
+    ("invoice", "if (item.IsSelected)", 'the item is marked "selected"'),
+    ("invoice", "if (entity != null)", "the invoice is found"),
+    ("invoice", "if (id.HasValue == false)", "no record is chosen"),
+    ("invoice", "if (vm.IsOrganization)", 'the invoice is marked "organization"'),
+    ("invoice", "if (id != null) //Edit", "a record is chosen"),
+    ("invoice", "if(vm.DueDate.Year < 1980)", "the due date is before 1980"),
+    ("invoice", 'if(!(vm.StatusName.ToLower() == "pending" || vm.StatusName.ToLower() == "rejected"))',
+     'the status is neither "pending" nor "rejected"'),
+    ("invoice", "if (premiumFromParticular != null)", "the premium from particular is available"),
+    ("invoice", "if (policy != null && policy.Endorsements != null && policy.Endorsements.Count > 0)",
+     "the policy has at least one endorsement"),
+    ("invoice", "if(policyId != null)", "a policy is chosen"),
+    ("SOA", "if (vm == null)", "the SOA is not found"),
+    ("directory", "if(id == null)", "no record is chosen"),
+    ("directory", "if (model == null)", "no directory details are given"),
+    ("order", "if (model.Total > 500)", "the total is more than 500"),
+]
+
+
+@pytest.mark.parametrize("noun,code,text", REAL_CHECKS)
+def test_real_checks_read_as_plain_english(noun, code, text):
+    (check,) = user_stories.sts.ct.checks([code], noun)
+    assert check["text"] == text
+    assert not re.search(r"[(){}=!&|]|\.\w|\bmodel\b|\bvm\b|\bentity\b", check["text"]), "no code left"
+
+
+def test_what_a_failed_check_does_becomes_its_outcome():
+    ct = user_stories.sts.ct
+    got = ct.checks(["if (model.Total > 500)", 'throw new Exception("Order total exceeds limit 500")',
+                     "if (vm == null)", "return HttpNotFound();", "if (vm == null)", "if (x.IsOrganization)"], "order")
+    assert [(c["text"], c["outcome"]) for c in got] == [
+        ("the total is more than 500", 'the message "Order total exceeds limit 500" is shown'),
+        ("the order is not found", 'a "not found" page is shown'),
+        ('the x is marked "organization"', None)], "repeated checks appear once"
+    assert ct.outcome("return new HttpStatusCodeResult(HttpStatusCode.BadRequest);") == "the request is refused"
 
 
 # ------------------------------------------------------------------ tracker push
@@ -381,6 +539,29 @@ def test_ado_hierarchy_and_idempotent_rerun(backlog):
     created = len(log)
     rep2 = pb.push(backlog, "ado", {}, ENVS["ado"], apply=True, http=_calls_http(log), state=state)
     assert len(log) == created and rep2["summary"] == {"exists": created}
+
+
+def test_push_to_ado_button_request(eng, monkeypatch):
+    """The 'Push to ADO' button: all stories (template wording included), ADO settings from the environment."""
+    eng = user_stories.generate(_with_sir(eng), refine=False)
+    store.save(eng)
+    log = []
+    monkeypatch.setattr(user_stories.pb, "http_request", _calls_http(log))
+    for name, value in ENVS["ado"].items():
+        monkeypatch.setenv(name, value)
+    client = TestClient(api_main.app)
+    body = {"provider": "ado", "apply": True, "confirm": True, "allowTemplate": True}
+    rep = client.post("/api/engagements/eng1/user-stories/push", json=body).json()
+    items = len(user_stories.bm.flatten(eng["userStories"]["backlog"]))
+    assert rep["summary"] == {"created": items}, "epic, features and every story, template wording included"
+    assert all("dev.azure.com/o/p/" in call[1] for call in log), "organisation and project come from ADO_ORG / ADO_PROJECT"
+    again = client.post("/api/engagements/eng1/user-stories/push", json=body).json()
+    assert again["summary"] == {"exists": items} and len(log) == items, "pushing twice creates nothing new"
+    assert store.load("eng1")["userStories"]["lastPush"]["provider"] == "ado"
+
+    monkeypatch.delenv("ADO_PAT")
+    r = client.post("/api/engagements/eng1/user-stories/push", json=body)
+    assert r.status_code == 400 and "ADO_PAT" in r.json()["detail"], "a clear error when ADO is not configured"
 
 
 def test_failed_parent_skips_children_and_template_stories_are_blocked(backlog):
@@ -524,82 +705,153 @@ def test_assessment_finds_evidence_and_ignores_modern_authorize():
     assert any("DBA" in d for d in a["definitionOfDone"])
 
 
-def test_estimates_score_three_factors_and_llm_cannot_go_below_it(eng, monkeypatch):
+def test_estimates_use_business_complexity_only(eng):
     eng = _with_sir(eng)
     sir = eng["seed"]["semantic_ir"][0]
     sir["legacyAssessment"] = {"paradigm": "MVC", "uplift": 3, "regressionScope": ["Orders: Edit"],
                                "definitionOfDone": ["dod"], "factors": [
                                    {"category": "data", "finding": "Raw SQL", "evidence": "c.cs#L1", "points": 2,
                                     "question": "Which stored procedures does this use?"},
+                                   {"category": "framework", "finding": "Web Forms", "evidence": "c.cs#L2", "points": 2},
                                    {"category": "unknowns", "finding": "TODO in code", "evidence": "c.cs#L9",
                                     "points": 1}]}
     backlog = user_stories.sts.build_backlog([sir])
-    stories = {s["id"]: s for _, _, s in user_stories.bm.iter_stories(backlog)}
-    flow = next(s for s in stories.values() if s["type"] == "flow")
-    est = flow["estimation"]
-    for key in ("complexity", "work", "risk"):   # every factor is a 1-5 level backed by evidence
+    story = next(user_stories.bm.iter_stories(backlog))[2]
+    est = story["estimation"]
+    for key in ("rules", "scope", "uncertainty"):   # every factor is a 1-5 level backed by evidence
         assert 1 <= est[key]["level"] <= 5 and est[key]["evidence"]
-    assert "Raw SQL" in est["risk"]["evidence"] and est["risk"]["level"] >= 3
-    assert est["factorSum"] == sum(est[k]["level"] for k in ("complexity", "work", "risk"))
-    assert est["humanPoints"] == user_stories.sts.est_mod.to_points(est["factorSum"])
-    assert est["points"] == est["aiPoints"] == flow["storyPoints"] <= est["humanPoints"]
-    assert est["humanOnly"] == 2, "open question on the flow keeps human-only effort"
-    assert "legacy-risk" in flow["labels"] and flow["definitionOfDone"] == ["dod"]
-    assert any("Adjacent workflows" in a for a in flow["acceptanceCriteria"])
-    assert [q["question"] for q in backlog["openQuestions"]][0] == "Which stored procedures does this use?"
-    ids = [q["id"] for q in backlog["openQuestions"]]
-    assert {"Q-EST-01", "Q-EST-02", "Q-EST-03"} <= set(ids), "AI level, reference story and team context to confirm"
-    ref = backlog["estimationModel"]["reference"]
-    assert "reference-story" in stories[ref["storyId"]]["labels"] and stories[ref["storyId"]]["type"] == "functional"
-    assert backlog["epics"][0]["approach"].startswith("Parity-first")
+    evidence = " ".join(e for k in ("rules", "scope", "uncertainty") for e in est[k]["evidence"])
+    assert "Raw SQL" not in evidence and "Web Forms" not in evidence, "technical findings are not sized"
+    assert "TODO in code" in evidence, "undocumented business intent is business uncertainty"
+    assert est["factorSum"] == sum(est[k]["level"] for k in ("rules", "scope", "uncertainty"))
+    assert est["points"] == story["storyPoints"] == user_stories.sts.est_mod.to_points(est["factorSum"])
+    assert any("Orders: Edit workflow use the same records" in a for a in story["acceptanceCriteria"])
+    questions = [q["question"] for q in backlog["openQuestions"]]
+    assert "Which stored procedures does this use?" not in questions, "technical planning questions are dropped"
+    assert [q["id"] for q in backlog["openQuestions"]] == ["Q-EST-02"]
+    assert backlog["estimationModel"]["reference"]["storyId"] == story["id"]
     assert not [i for i in user_stories.bm.validate(backlog) if i[0] == "ERROR"]
-    upd = {"title": "T", "narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
-           "acceptanceCriteria": ["Scenario: x"], "storyPoints": 1}
-<<<<<<< HEAD
-    ai = flow["storyPoints"]
-    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == ai
+
+
+def test_refinement_can_raise_points_one_step_never_lower(eng):
+    sir = _with_sir(eng)["seed"]["semantic_ir"][0]
+    story = next(user_stories.bm.iter_stories(user_stories.sts.build_backlog([sir])))[2]
+    rules = [r for r in sir["rules"] if r["kind"] != "legacy_plumbing_pruned"]
+    base = story["storyPoints"]
+    upd = {"narrative": {"asA": "a", "iWant": "i", "soThat": "s"}, "description": "d",
+           "acceptanceCriteria": ['Given x, when y, then "Order total exceeds limit 500" is shown (R1-R4)'],
+           "storyPoints": 1}
+    assert user_stories._apply_story(story, upd, rules) is None and story["storyPoints"] == base, "never lower"
     upd["storyPoints"] = 21
-    assert user_stories._apply_story(flow, upd, None) is None
-    assert flow["storyPoints"] == est["humanPoints"], "never above manual"
+    assert user_stories._apply_story(story, upd, rules) is None
+    assert story["storyPoints"] == next(f for f in user_stories.bm.FIBONACCI if f > base), "at most one step up"
 
 
-def test_points_follow_evidence_not_rule_count():
+def test_points_follow_business_rules_not_technology():
     est = user_stories.sts.est_mod
     simple = [{"ruleId": "R1", "statement": "Reads Invoice", "classification": "Data Retrieval",
                "trustBoundary": "Application Logic", "astNode": "AST:InvoiceApi.Get:L5:READS"}]
-    heavy = [{"ruleId": "G", "statement": "Validates the request before processing: a; b; c; d; e; f",
-              "conditions": list("abcdef"), "classification": "Validation / Control Flow",
+    heavy = [{"ruleId": "G", "statement": "Validates the request before processing",
+              "conditions": ["if (a)", "if (b)", "if (c)", "if (d)", "if (e)", "if (premium > limit)"],
+              "classification": "Validation / Control Flow",
               "trustBoundary": "Application Logic", "astNode": "AST:Inv.Save:L1:BRANCH"}] + [
         {"ruleId": f"W{i}", "statement": f"Persists changes to T{i}", "classification": "State Mutation",
-         "trustBoundary": "Deterministic Core (x)", "astNode": f"AST:Inv.Save:L{i}:WRITES"} for i in range(2, 8)]
-    risky = {"factors": [{"category": "unknowns", "finding": "untraced calls", "points": 1},
-                         {"category": "security", "finding": "MD5 hashing", "points": 1}]}
-    a = est.score_behaviour(simple, None, None)
-    b = est.score_behaviour(heavy, None, None)
-    c = est.score_behaviour(simple, risky, {"legacyStackFamiliar": False, "targetStackFamiliar": False})
-    assert a["humanPoints"] <= 2, "a single read is at the reference-story size"
-    assert b["complexity"]["level"] > a["complexity"]["level"] and b["work"]["level"] > a["work"]["level"]
-    assert b["humanPoints"] >= 8
-    assert c["risk"]["level"] > a["risk"]["level"] and c["humanPoints"] > a["humanPoints"], "unknowns + team raise risk"
-    familiar = est.score_behaviour(simple, risky, {"builtSimilarBefore": True})
-    assert familiar["risk"]["level"] < c["risk"]["level"]
+         "trustBoundary": "Deterministic Core (x)", "astNode": f"AST:Inv.Save:L{i}:WRITES"} for i in range(2, 6)]
+    internal = [{"ruleId": f"C{i}", "statement": f"Delegates to Inv.Step{i}", "classification": "Orchestration",
+                 "trustBoundary": "Application Logic", "astNode": f"AST:Inv.Get:L{i}:CALLS"} for i in range(10)]
+    technical = {"factors": [{"category": "security", "finding": "MD5 hashing", "points": 1},
+                             {"category": "data", "finding": "stored procedures", "points": 2},
+                             {"category": "coupling", "finding": "static state", "points": 2}]}
+    unknown = {"factors": [{"category": "unknowns", "finding": "undocumented discount rule", "points": 1}]}
+    a = est.score_use_case(simple)
+    b = est.score_use_case(heavy)
+    assert a["points"] <= 2, "a single look-up is at the reference-story size"
+    assert b["rules"]["level"] > a["rules"]["level"] and b["scope"]["level"] > a["scope"]["level"]
+    assert b["uncertainty"]["level"] > a["uncertainty"]["level"], "money checks that change records carry impact"
+    assert b["points"] >= 8
+    assert est.score_use_case(simple + internal) == a, "internal calls between code do not change the size"
+    assert est.score_use_case(simple, technical) == a, "technical legacy findings do not change the size"
+    assert est.score_use_case(simple, unknown)["uncertainty"]["level"] > a["uncertainty"]["level"]
+    dashboard = [{"ruleId": "G", "statement": "Validates", "conditions": ["if (x.IsOrganization)"] * 3,
+                  "classification": "Validation / Control Flow", "astNode": "AST:D.Index:L1:BRANCH"}]
+    assert est.checks(dashboard) == ["if (x.IsOrganization)"], "the same check repeated is one check"
+    thrown = [{"ruleId": "G", "statement": "Validates", "astNode": "AST:D.Index:L1:BRANCH",
+               "conditions": ["if (total > 500)", 'throw new Exception("Too big")', "return HttpNotFound();"]}]
+    assert est.checks(thrown) == ["if (total > 500)"], "what a failed check does is not another check"
 
 
-def test_ai_capability_levels_scale_points(eng):
+def test_story_is_the_user_story_card(eng):
     sir = _with_sir(eng)["seed"]["semantic_ir"][0]
-    totals = {}
-    for level in ("L0", "L1", "L2", "L3"):
-        b = user_stories.sts.build_backlog([sir], ai_capability=level)
-        c = user_stories.bm.counts(b)
-        totals[level] = c["storyPoints"]
-        assert c["aiEfficiency"] <= user_stories.sts.MAX_EPIC_EFFICIENCY
-        assert b["estimationModel"] == {**b["estimationModel"], "capability": level, "assumed": False}
-        assert not any(q["id"] == "Q-EST-01" for q in b["openQuestions"])
-        assert not [i for i in user_stories.bm.validate(b) if i[0] == "ERROR"]
-    assert totals["L0"] == c["humanPoints"], "no AI tools: AI-assisted equals the manual baseline"
-    assert totals["L0"] >= totals["L1"] >= totals["L2"] >= totals["L3"]
-=======
-    assert user_stories._apply_story(flow, upd, None) is None and flow["storyPoints"] == 8
+    backlog = user_stories.sts.build_backlog([sir])
+    for _, _, s in user_stories.bm.iter_stories(backlog):
+        n = s["narrative"]
+        assert s["title"] == f"As a {n['asA']}, I want {n['iWant']} so that {n['soThat']}"
+        for a in s["acceptanceCriteria"]:   # one line each: Given ..., when ..., then ... (short rule ids)
+            assert "\n" not in a and a.startswith("Given ") and ", when " in a and ", then " in a
+            assert "SIR-" not in a
+        assert s["behaviour"] == sir["name"]
+    assert user_stories.sts.cite(["S.R1", "S.R2", "S.R3", "S.R5", "S.R7", "S.R8"]) == " (R1–R3, R5, R7–R8)"
+    assert user_stories.sts.cite([]) == ""
+    assert user_stories.sts.story_title({"asA": "accounts clerk", "iWant": "to x", "soThat": "y"}).startswith("As an")
+
+
+def test_renderers_show_the_story_card(eng):
+    sir = _with_sir(eng)["seed"]["semantic_ir"][0]
+    backlog = user_stories.sts.build_backlog([sir])
+    md = user_stories.bm.backlog_markdown(backlog)
+    epic, feature, story = next(user_stories.bm.iter_stories(backlog))
+    assert story["title"] in md and f"{epic['title']} › {feature['title']}" in md
+    assert f"- {story['acceptanceCriteria'][0]}" in md and story["description"] in md
+    for hidden in ("Trace:", "Legacy lines", "AST:", "Complexity", "AI-assisted", "```"):
+        assert hidden not in md, hidden
+    item = next(i for i in user_stories.bm.flatten(backlog) if i["level"] == "story")
+    ac0 = story["acceptanceCriteria"][0]
+    for body, expected in ((user_stories.bm.item_markdown(item), ac0), (user_stories.bm.jira_wiki(item), ac0),
+                           (json.dumps(user_stories.bm.adf(item), ensure_ascii=False), json.dumps(ac0)[1:-1])):
+        assert "Story points" in body and feature["title"] in body and expected in body
+        assert "trace" not in body.lower()
+    assert "<li>" in user_stories.bm.acceptance_html(story)
+
+
+def test_story_card_edits_and_removal_persist(eng):
+    eng = user_stories.generate(_with_sir(eng), refine=False)
+    stories = [s for _, _, s in user_stories.bm.iter_stories(eng["userStories"]["backlog"])]
+    sid, trace = stories[0]["id"], dict(stories[0]["trace"])
+    out = user_stories.update_story(eng, sid, {
+        "title": "As a clerk, I want to see the owner so that I know who is responsible",
+        "description": "Shows the owner.", "acceptanceCriteria": ["Given x, when y, then z (R-001)", "  ", ""],
+        "labels": ["read view", "bad label!", "assignee"], "storyPoints": 1, "trace": {"sirId": "HACKED"}})
+    s = next(x for _, _, x in user_stories.bm.iter_stories(out["userStories"]["backlog"]) if x["id"] == sid)
+    assert s["title"].startswith("As a clerk") and s["acceptanceCriteria"] == ["Given x, when y, then z (R-001)"]
+    assert s["labels"] == ["read-view", "assignee"] and s["storyPoints"] == 1 and s["trace"] == trace
+    assert s["narrativeSource"] == "refined" and s["edited"]
+    assert not [v for v in out["userStories"]["validation"] if v["level"] == "ERROR"], "a person may lower points"
+    md = (store.engagement_dir("eng1") / "artifacts" / "user-stories" / "backlog.md").read_text(encoding="utf-8")
+    assert "As a clerk" in md, "backlog.md is rewritten on save"
+    with pytest.raises(ValueError):
+        user_stories.update_story(out, sid, {"storyPoints": 4})
+    with pytest.raises(ValueError):
+        user_stories.update_story(out, sid, {"acceptanceCriteria": [" "]})
+    out = user_stories.remove_story(out, sid)
+    remaining = [x["id"] for _, _, x in user_stories.bm.iter_stories(out["userStories"]["backlog"])]
+    assert sid not in remaining and out["userStories"]["counts"]["stories"] == len(stories) - 1
+    with pytest.raises(KeyError):
+        user_stories.remove_story(out, sid)
+
+
+def test_story_edit_endpoints(eng, monkeypatch):
+    eng = user_stories.generate(_with_sir(eng), refine=False)
+    store.save(eng)
+    sid = next(user_stories.bm.iter_stories(eng["userStories"]["backlog"]))[2]["id"]
+    client = TestClient(api_main.app)
+    r = client.patch(f"/api/engagements/eng1/user-stories/stories/{sid}", json={"description": "New text"})
+    assert r.status_code == 200
+    assert next(s for _, _, s in user_stories.bm.iter_stories(r.json()["userStories"]["backlog"])
+                if s["id"] == sid)["description"] == "New text"
+    assert client.patch("/api/engagements/eng1/user-stories/stories/US-NOPE", json={"title": "x"}).status_code == 404
+    assert client.patch(f"/api/engagements/eng1/user-stories/stories/{sid}", json={"title": " "}).status_code == 400
+    assert client.delete(f"/api/engagements/eng1/user-stories/stories/{sid}").status_code == 200
+    assert client.delete(f"/api/engagements/eng1/user-stories/stories/{sid}").status_code == 404
 
 
 def test_modules_are_ordered_most_used_first():
@@ -615,4 +867,3 @@ def test_modules_are_ordered_most_used_first():
     assert [m["modernization"]["rank"] for m in out] == [1, 2, 3, 4]
     assert out[0]["modernization"]["reason"].startswith("used by 3 other modules")
     assert out[-1]["modernization"]["reason"].startswith("not used by any other module")
->>>>>>> 5102ff85c956dfc79ccaa9dae343f1ed0c3ca560

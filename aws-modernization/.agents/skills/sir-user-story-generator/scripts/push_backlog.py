@@ -251,7 +251,7 @@ class Ado(Provider):
         wi_type = self.TYPES[proc][wi_type]
         if item["level"] == "story":
             story = item["story"]
-            desc, ac = bm.story_html(story), bm.acceptance_html(story)
+            desc, ac = bm.story_html(story, item.get("epic"), item.get("feature")), bm.acceptance_html(story)
         else:
             src = item["epic"] if item["level"] == "epic" else item["feature"]
             desc, ac = f"<p>{bm.html.escape(src.get('description') or src['title'])}</p>", ""
