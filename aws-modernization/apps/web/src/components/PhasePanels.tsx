@@ -6,6 +6,7 @@ import {GraphView} from './GraphView';
 import {Cloud, Cpu, Server, ShieldCheck, Zap} from './Icons';
 import {ScopePanel} from './ScopePanel';
 import {SemanticIRPanel} from './SemanticIRPanel';
+import {TestScenariosPanel} from './TestScenariosPanel';
 import {UserStoriesPanel} from './UserStoriesPanel';
 
 export function PhasePanels({
@@ -45,6 +46,8 @@ export function PhasePanels({
         case 'modernize':
             return <Modernize e={engagement} onChange={onChange} />;
 
+        case 'test-scenarios':
+            return <TestScenariosPanel e={engagement} onChange={onChange} />;
         case 'tests':
             return <Tests e={engagement} />;
         case 'failures':

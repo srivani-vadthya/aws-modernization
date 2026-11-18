@@ -600,4 +600,5 @@ def generate(eng: dict, *, use_llm: bool = True, force: bool = False) -> dict:
         fresh["sirMeta"] = {"capabilityId": cap_id, "generatedAt": _now(), **meta}
         # A regenerated SIR invalidates anything derived from the old one.
         fresh.pop("userStories", None)
+        fresh.pop("testScenarios", None)
         return store.save(fresh)

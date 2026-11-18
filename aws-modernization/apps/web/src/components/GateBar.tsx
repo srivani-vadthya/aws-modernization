@@ -205,6 +205,7 @@ function isLocked(engagement: Engagement, phase: string) {
         'requirements',
         'backlog',
         'modernize',
+        'test-scenarios',
         'tests',
         'failures',
         'artifacts',

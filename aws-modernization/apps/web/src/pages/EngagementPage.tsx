@@ -246,19 +246,24 @@ export function EngagementPage() {
                                 <ol className='space-y-1'>
                                     {[
                                         {
+                                            id: 'test-scenarios',
+                                            label: 'Test Scenarios',
+                                            step: '07',
+                                        },
+                                        {
                                             id: 'tests',
                                             label: 'Tests & Parity',
-                                            step: '07',
+                                            step: '08',
                                         },
                                         {
                                             id: 'failures',
                                             label: 'Failure Analysis',
-                                            step: '08',
+                                            step: '09',
                                         },
                                         {
                                             id: 'artifacts',
                                             label: 'Final Artifacts',
-                                            step: '09',
+                                            step: '10',
                                         },
                                     ].map((item) => {
                                         const g = eng.gates[item.id];
@@ -397,6 +402,8 @@ export function EngagementPage() {
                                     (s) => s.module === eng.scope?.capabilityId,
                                 )
                               ? 'The Semantic IR must be generated for the selected scope before it can be approved.'
+                              : phase === 'test-scenarios' && !eng.testScenarios
+                                ? 'Generate the test scenarios before approving this step.'
                               : phase === 'user-stories' && !eng.userStories
                                 ? 'Generate the user stories before approving. Pushing to a tracker is optional.'
                                 : undefined

@@ -8,6 +8,7 @@ PHASES = [
     {"id": "requirements", "label": "Requirements", "group": "forward"},
     {"id": "backlog", "label": "Backlog", "group": "forward"},
     {"id": "modernize", "label": "Technology", "group": "forward"},
+    {"id": "test-scenarios", "label": "Test Scenarios", "group": "forward"},
     {"id": "tests", "label": "Tests", "group": "forward"},
     {"id": "failures", "label": "Failure analysis", "group": "forward"},
     {"id": "artifacts", "label": "Final artifacts", "group": "forward"},

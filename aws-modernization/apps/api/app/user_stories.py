@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import scope_modules, store
+from . import scope_modules, store, test_scenarios
 from .llm_json import ask_json
 
 logger = logging.getLogger(__name__)
@@ -354,7 +354,9 @@ def generate(eng: dict, *, refine: bool = True, epic: str | None = None, persona
         ],
         "lastPush": None,
     }
-    return store.save(eng)
+    store.save(eng)
+    test_scenarios.sync(eng)   # the test cases follow the stories: built and checked as soon as the stories exist
+    return eng
 
 
 # --------------------------------------------------------------------------- manual edits
@@ -387,7 +389,9 @@ def _persist(eng: dict) -> dict:
     out = artifacts_dir(eng["id"])
     (out / "backlog.json").write_text(json.dumps(backlog, indent=2, ensure_ascii=False), encoding="utf-8")
     (out / "backlog.md").write_text(bm.backlog_markdown(backlog), encoding="utf-8")
-    return store.save(eng)
+    store.save(eng)
+    test_scenarios.sync(eng)   # an edited or removed story changes its tests
+    return eng
 
 
 def update_story(eng: dict, sid: str, changes: dict) -> dict:

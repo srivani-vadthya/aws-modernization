@@ -14,7 +14,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import ado, aws_intake, bedrock_skills, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, store, target_contract
-from . import ado, aws_intake, bedrock_skills, ingest, knowledge_graph, pack, playwright_gen, scope_modules, sir_generator, store, user_stories
+from . import ado, aws_intake, bedrock_skills, ingest, knowledge_graph, pack, playwright_gen, scope_modules, sir_generator, store, test_scenarios, user_stories
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -240,9 +240,10 @@ def set_scope(eid: str, body: ScopeIn):
     if previous_scope and previous_scope != body.capabilityId:
         # SIR and user stories belong to one module: a different scope invalidates them and their sign-offs.
         _ensure_gates(eng)
-        for pid in ("semantic-ir", "user-stories"):
+        for pid in ("semantic-ir", "user-stories", "test-scenarios"):
             eng["gates"][pid].update(status="pending", decision=None, comment=None, actor=None, at=None)
         eng.pop("userStories", None)
+        eng.pop("testScenarios", None)
         eng.pop("sirMeta", None)
     module_card = scope_modules.find_module(eng, body.capabilityId)
     eng["scope"] = {
@@ -532,6 +533,8 @@ def decide_gate(eid: str, phase: str, body: GateIn):
         raise HTTPException(400, "Generate the Semantic IR for the selected scope before approving it")
     if phase == "user-stories" and body.decision == "approved" and not eng.get("userStories"):
         raise HTTPException(400, "Generate the user stories before approving this step")
+    if phase == "test-scenarios" and body.decision == "approved" and not eng.get("testScenarios"):
+        raise HTTPException(400, "Generate the test scenarios before approving this step")
     
     # Workflow clustered mapping:
     # 'discovery' clusters both discovery & graph; 'requirements' clusters requirements & backlog.
@@ -1291,6 +1294,61 @@ class TrackerPushIn(BaseModel):
     allowTemplate: bool = False
     config: dict[str, str] = Field(default_factory=dict)       # non-secret overrides (project key, org, ...)
     credentials: dict[str, str] = Field(default_factory=dict)  # optional, session-only; never stored
+
+
+class TestRunIn(BaseModel):
+    baseUrl: str | None = Field(default=None, pattern=r"^https?://\S+$")
+    caseIds: list[str] | None = None
+
+
+def _with_stale(eng: dict) -> dict:
+    return {"testScenarios": eng.get("testScenarios"), "stale": test_scenarios.is_stale(eng)}
+
+
+@app.get("/api/engagements/{eid}/test-scenarios")
+def get_test_scenarios(eid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return _with_stale(eng)
+
+
+@app.post("/api/engagements/{eid}/test-scenarios/generate")
+def generate_test_scenarios(eid: str):
+    """Scenarios, detailed test cases, Playwright (TypeScript) scripts, test data and coverage, from the user stories."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return _with_stale(test_scenarios.generate(eng))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/engagements/{eid}/test-scenarios/run")
+def run_test_scenarios(eid: str, body: TestRunIn | None = None):
+    """Quality checks on every case, plus a live Playwright run when a base URL is given."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    body = body or TestRunIn()
+    try:
+        test_scenarios.run(eng, body.baseUrl, body.caseIds)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _with_stale(eng)
+
+
+@app.get("/api/engagements/{eid}/test-scenarios/export")
+def export_test_scenarios(eid: str, format: str = "zip"):
+    eng = store.load(eid)
+    if not eng or not eng.get("testScenarios"):
+        raise HTTPException(404, "No test scenarios generated yet")
+    if format == "md":
+        return Response(test_scenarios.export_markdown(eng), media_type="text/markdown",
+                        headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.md"'})
+    return Response(test_scenarios.export_zip(eng), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.zip"'})
 
 
 @app.post("/api/engagements/{eid}/user-stories/push")

@@ -63,6 +63,7 @@ export type Engagement = {
     llm: { status: "ok" | "unavailable" | "skipped"; model: string | null; lifted: number };
   };
   userStories?: UserStoriesState | null;
+  testScenarios?: TestScenariosState | null;
 };
 
 export type ScopeUseCase = {
@@ -153,6 +154,40 @@ export type Story = {
   classification?: string;
   trace: { sirId: string; ruleId: string | null; ruleIds?: (string | null)[]; legacyLines: string; snippet: string; astNode: string };
 };
+
+
+export type TestCategory = "positive" | "negative" | "validation" | "edge" | "exception";
+export type TestScenario = {
+  id: string; storyId: string; storyTitle: string; feature: string; epic: string; title: string;
+  category: TestCategory; origin: "criterion" | "derived"; criterionIndex: number | null; criterion: string | null;
+  ruleRefs: string[]; needsReview: boolean; caseIds: string[];
+};
+export type TestCase = {
+  id: string; scenarioId: string; storyId: string; name: string; category: TestCategory; priority: string;
+  description: string; preconditions: string[]; steps: string[]; testData: { name: string; value: string; source: string }[];
+  expected: string[]; ruleRefs: string[]; origin: "criterion" | "derived"; needsReview: boolean;
+};
+export type TestDataItem = { id: string; kind: string; name: string; value: string; source: string; usedBy: string[] };
+export type CoverageStory = {
+  storyId: string; title: string; feature: string; epic: string; covered: boolean; scenarioIds: string[];
+  byCategory: Record<TestCategory, number>;
+  criteria: { index: number; text: string; category: TestCategory; scenarioIds: string[] }[];
+};
+export type TestResultStatus = "passed" | "failed" | "skipped" | "not-run";
+export type TestRun = {
+  id: string; at: string; mode: "checks" | "live"; baseUrl: string | null;
+  liveStatus: "not-requested" | "completed" | "setup-required" | "unavailable" | "failed"; liveReason: string | null;
+  total: number; summary: Record<TestResultStatus, number>;
+  results: { caseId: string; scenarioId: string; status: TestResultStatus; message: string; durationMs: number | null;
+             live: boolean; checks: { name: string; ok: boolean; detail: string }[] }[];
+};
+export type TestScenariosState = {
+  generatedAt: string; sourceDigest: string; scope: string | null; scenarios: TestScenario[]; cases: TestCase[];
+  testData: TestDataItem[]; coverage: CoverageStory[]; files: Record<string, string>; runs: TestRun[];
+  counts: { scenarios: number; cases: number; stories: number; criteria: number; criteriaCovered: number; needsReview: number;
+            byCategory: Record<TestCategory, number> };
+};
+export type TestScenariosResponse = { testScenarios: TestScenariosState | null; stale: boolean };
 
 export type StoryEdit = Partial<Pick<Story, "title" | "description" | "acceptanceCriteria" | "labels" | "storyPoints">>;
 
@@ -1131,6 +1166,16 @@ export const api = {
       parse<Engagement>(r),
     ),
   userStoriesExportUrl: (id: string, format: "json" | "md") => `/api/engagements/${id}/user-stories/export?format=${format}`,
+  testScenarios: (id: string) => fetch(`/api/engagements/${id}/test-scenarios`).then((r) => parse<TestScenariosResponse>(r)),
+  generateTestScenarios: (id: string) =>
+    fetch(`/api/engagements/${id}/test-scenarios/generate`, { method: "POST" }).then((r) => parse<TestScenariosResponse>(r)),
+  runTestScenarios: (id: string, body: { baseUrl?: string; caseIds?: string[] } = {}) =>
+    fetch(`/api/engagements/${id}/test-scenarios/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<TestScenariosResponse>(r)),
+  testScenariosExportUrl: (id: string, format: "zip" | "md") => `/api/engagements/${id}/test-scenarios/export?format=${format}`,
   packUrl: (id: string) => `/api/engagements/${id}/pack`,
 };
 
