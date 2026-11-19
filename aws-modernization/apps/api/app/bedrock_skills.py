@@ -923,7 +923,7 @@ def orchestrate_feedback(engagement: dict, feedback_comment: str, current_phase:
     history.append(feedback_log)
     
     # Invalidate downstream gates
-    phase_order = ["intake", "discovery", "graph", "scope", "requirements", "backlog", "modernize", "test-scenarios", "tests", "failures", "artifacts"]
+    phase_order = ["intake", "discovery", "graph", "scope", "semantic-ir", "user-stories", "modernize", "test-scenarios", "tests", "failures", "artifacts"]
     if target_phase in phase_order:
         t_idx = phase_order.index(target_phase)
         for p in phase_order[t_idx:]:

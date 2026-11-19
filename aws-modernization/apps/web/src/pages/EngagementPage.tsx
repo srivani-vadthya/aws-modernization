@@ -21,10 +21,17 @@ export function EngagementPage() {
         api.get(id)
             .then((e) => {
                 setEng(e);
+                // 'requirements' / 'backlog' were steps after the user stories: engagements saved on one
+                // continue at Target Architecture. 'sir-requirements' (removed) continues at the user stories.
                 const currentPhase =
                     !e.currentPhase || e.currentPhase === 'intake'
                         ? 'discovery'
-                        : e.currentPhase;
+                        : e.currentPhase === 'requirements' ||
+                            e.currentPhase === 'backlog'
+                          ? 'modernize'
+                          : e.currentPhase === 'sir-requirements'
+                            ? 'user-stories'
+                            : e.currentPhase;
                 setPhase(currentPhase);
             })
             .catch((err) => setError(err.message));
