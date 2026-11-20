@@ -1,4 +1,4 @@
-import {ReactNode, type, useEffect, useState} from 'react';
+import {type ReactNode, useEffect, useState} from 'react';
 
 import {AppliedKnowledgeGraph} from './AppliedKnowledgeGraph';
 
@@ -102,6 +102,15 @@ type Report = {
     }[];
     comments: Comment[];
 };
+
+function saveDocumentBlob(blob: Blob, disposition: string | null) {
+    const match = disposition?.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || 'legacy-technical-guide.docx';
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename; link.click();
+    URL.revokeObjectURL(url);
+}
 
 //const tabs = [
 //["overview", "Overview"], ["modules", "Modules"], ["dependencies", "Dependencies"],
@@ -208,6 +217,8 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [query, setQuery] = useState('');
+    const [documentStatus, setDocumentStatus] = useState<{status: string; stage?: string; completedChunks?: number; totalChunks?: number; error?: string | null}>({status: 'not_generated'});
+    const [documentBusy, setDocumentBusy] = useState(false);
     const endpoint = `/api/engagements/${engagementId}/discovery-report`;
     useEffect(() => {
         let alive = true;
@@ -226,6 +237,55 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
             alive = false;
         };
     }, [endpoint]);
+
+    useEffect(() => {
+        let active = true;
+        fetch(`/api/engagements/${engagementId}/discovery-document/status`)
+            .then(async (response) => response.ok ? response.json() : null)
+            .then((status) => { if (active && status) setDocumentStatus(status); })
+            .catch(() => undefined);
+        return () => { active = false; };
+    }, [engagementId]);
+
+    async function downloadTechnicalDocument() {
+        if (documentBusy) return;
+        setDocumentBusy(true);
+        setError(null);
+        try {
+            if (documentStatus.status === 'completed') {
+                const cachedFile = await fetch(`/api/engagements/${engagementId}/discovery-document`);
+                if (cachedFile.ok) {
+                    const blob = await cachedFile.blob();
+                    saveDocumentBlob(blob, cachedFile.headers.get('content-disposition'));
+                    setDocumentBusy(false); return;
+                }
+            }
+            const start = await fetch(`/api/engagements/${engagementId}/discovery-document/generate`, {method: 'POST'});
+            const initial = await start.json();
+            if (!start.ok) throw new Error(initial.detail || 'Could not start repository documentation.');
+            setDocumentStatus(initial);
+            if (initial.status === 'completed') {
+                const file = await fetch(`/api/engagements/${engagementId}/discovery-document`);
+                if (!file.ok) throw new Error('The generated document is not available yet.');
+                const blob = await file.blob();
+                saveDocumentBlob(blob, file.headers.get('content-disposition'));
+                setDocumentBusy(false); return;
+            }
+            while (true) {
+                await new Promise((resolve) => window.setTimeout(resolve, 1500));
+                const statusResponse = await fetch(`/api/engagements/${engagementId}/discovery-document/status`);
+                const status = await statusResponse.json(); setDocumentStatus(status);
+                if (status.status === 'failed') throw new Error(status.error || 'Repository documentation generation failed.');
+                if (status.status === 'completed') break;
+            }
+            const file = await fetch(`/api/engagements/${engagementId}/discovery-document`);
+            if (!file.ok) { const detail = await file.json().catch(() => ({})); throw new Error(detail.detail || 'The generated document could not be downloaded.'); }
+            const blob = await file.blob();
+            saveDocumentBlob(blob, file.headers.get('content-disposition'));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Technical documentation generation failed.');
+        } finally { setDocumentBusy(false); }
+    }
 
     async function run() {
         setBusy(true);
@@ -338,13 +398,24 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
                         saved results are reused.
                     </p>
                 </div>
-                <button
-                    disabled={busy}
-                    className={button}
-                    onClick={() => void run()}
-                >
-                    {busy ? 'Preparing discovery…' : 'Refresh discovery'}
-                </button>
+                <div className='flex items-center gap-2'>
+                    <button
+                        type='button'
+                        disabled={documentBusy}
+                        onClick={() => void downloadTechnicalDocument()}
+                        className='rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60'
+                        title='Analyze this cloned legacy repository with Bedrock and generate a developer guide'
+                    >
+                        {documentBusy ? `${documentStatus.stage || 'Analyzing repository…'}${documentStatus.totalChunks ? ` (${documentStatus.completedChunks || 0}/${documentStatus.totalChunks})` : ''}` : documentStatus.status === 'completed' ? 'Download document' : 'Generate document'}
+                    </button>
+                    <button
+                        disabled={busy}
+                        className={button}
+                        onClick={() => void run()}
+                    >
+                        {busy ? 'Preparing discovery…' : 'Refresh discovery'}
+                    </button>
+                </div>
             </div>
             {error && (
                 <p
@@ -353,6 +424,9 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
                 >
                     {error}
                 </p>
+            )}
+            {documentStatus.status === 'failed' && documentStatus.error && (
+                <p role='alert' className='rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800'>Document generation: {documentStatus.error}</p>
             )}
             {!report && !error && (
                 <p role='status' className='p-8 text-sm text-slate-500'>
