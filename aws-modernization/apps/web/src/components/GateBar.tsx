@@ -183,16 +183,10 @@ function isLocked(engagement: Engagement, phase: string) {
     }
     // Clustered steps mapping:
     // - 'scope' requires 'discovery' (or 'graph') to be approved
-    // - 'modernize' requires 'requirements' (or 'backlog') to be approved
     if (phase === 'scope') {
         const disc = engagement.gates['discovery']?.decision === 'approved';
         const grph = engagement.gates['graph']?.decision === 'approved';
         return !(disc || grph);
-    }
-    if (phase === 'modernize') {
-        const reqs = engagement.gates['requirements']?.decision === 'approved';
-        const bklg = engagement.gates['backlog']?.decision === 'approved';
-        return !(reqs || bklg);
     }
 
     const order = [
@@ -202,8 +196,6 @@ function isLocked(engagement: Engagement, phase: string) {
         'scope',
         'semantic-ir',
         'user-stories',
-        'requirements',
-        'backlog',
         'modernize',
         'test-scenarios',
         'tests',

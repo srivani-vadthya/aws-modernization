@@ -647,11 +647,10 @@ def test_gate_flow_scope_to_user_stories(eng, monkeypatch):
     assert r.status_code == 200 and r.json()["currentPhase"] == "user-stories"
 
     assert client.post(f"/api/engagements/{eid}/gates/user-stories", json={"decision": "approved"}).status_code == 400
-    assert client.post(f"/api/engagements/{eid}/gates/requirements", json={"decision": "approved"}).status_code == 400
     gen = client.post(f"/api/engagements/{eid}/user-stories/generate", json={"refine": False})
     assert gen.status_code == 200 and gen.json()["userStories"]["counts"]["stories"] > 0
     r = client.post(f"/api/engagements/{eid}/gates/user-stories", json={"decision": "approved"})
-    assert r.status_code == 200 and r.json()["currentPhase"] == "requirements"
+    assert r.status_code == 200 and r.json()["currentPhase"] == "modernize", "no Requirements step after the stories"
 
     dry = client.post(f"/api/engagements/{eid}/user-stories/push",
                       json={"provider": "github", "allowTemplate": True})

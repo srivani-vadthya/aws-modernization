@@ -551,8 +551,6 @@ def decide_gate(eid: str, phase: str, body: GateIn):
             pass
         elif phase == "semantic-ir" and eng["gates"].get("scope", {}).get("decision") == "approved":
             pass
-        elif phase == "modernize" and eng["gates"].get("requirements", {}).get("decision") == "approved":
-            pass
         elif eng["gates"][prev].get("decision") != "approved":
             raise HTTPException(400, f"Approve {prev} first")
             
@@ -589,12 +587,6 @@ def decide_gate(eid: str, phase: str, body: GateIn):
                 seed["scope_analysis"] = knowledge_graph.identify_scope(seed)
             except Exception:
                 pass
-        elif phase == "requirements" and "backlog" in eng["gates"]:
-            eng["gates"]["backlog"]["decision"] = "approved"
-            eng["gates"]["backlog"]["status"] = "approved"
-            eng["gates"]["backlog"]["comment"] = body.comment
-            eng["gates"]["backlog"]["actor"] = body.actor
-            eng["gates"]["backlog"]["at"] = eng["gates"][phase]["at"]
 
     if body.decision == "approved":
         # Calculate next phase taking into account clustered UI progression
@@ -607,12 +599,6 @@ def decide_gate(eid: str, phase: str, body: GateIn):
             nxt = "semantic-ir"
         elif phase == "semantic-ir":
             nxt = "user-stories"
-        elif phase == "user-stories":
-            nxt = "requirements"
-        elif phase == "requirements":
-            nxt = "modernize"
-        elif phase == "backlog":
-            nxt = "modernize"
         elif idx + 1 < len(PHASE_IDS):
             nxt = PHASE_IDS[idx + 1]
         else:
@@ -623,17 +609,8 @@ def decide_gate(eid: str, phase: str, body: GateIn):
             eng["gates"][nxt]["status"] = "ready"
             eng["status"] = nxt
 
-            # Dynamic gate-triggered progression with Amazon Bedrock
-            if nxt == "requirements":
-                source_dir = store.engagement_dir(eid) / "source"
-                try:
-                    dynamic_reqs = bedrock_skills.extract_dynamic_requirements(eng, source_dir)
-                    if dynamic_reqs:
-                        eng["seed"]["requirements"] = dynamic_reqs
-                except Exception:
-                    pass
-
-            elif nxt == "tests":
+            # Dynamic gate-triggered progression
+            if nxt == "tests":
                 try:
                     pw_dir = store.engagement_dir(eid) / "artifacts" / "tests" / "playwright"
                     playwright_gen.generate_playwright_suite(pw_dir, eng)

@@ -5,8 +5,6 @@ PHASES = [
     {"id": "scope", "label": "Scope", "group": "reverse"},
     {"id": "semantic-ir", "label": "Semantic IR", "group": "reverse"},
     {"id": "user-stories", "label": "User Story Generation", "group": "reverse"},
-    {"id": "requirements", "label": "Requirements", "group": "forward"},
-    {"id": "backlog", "label": "Backlog", "group": "forward"},
     {"id": "modernize", "label": "Technology", "group": "forward"},
     {"id": "test-scenarios", "label": "Test Scenarios", "group": "forward"},
     {"id": "tests", "label": "Tests", "group": "forward"},
