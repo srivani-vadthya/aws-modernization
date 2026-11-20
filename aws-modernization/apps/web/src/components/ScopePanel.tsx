@@ -34,6 +34,7 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [redescribing, setRedescribing] = useState(false);
+  const scopeApproved = e.gates['scope']?.decision === 'approved';
 
   useEffect(() => {
     let live = true;
@@ -50,6 +51,7 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
   const selected = useMemo(() => data?.modules.find((m) => m.id === selectedId) ?? null, [data, selectedId]);
 
   async function pick(m: ScopeModule) {
+    if (scopeApproved) return;
     if (saving || m.id === e.scope?.capabilityId) {
       setSelectedId(m.id);
       return;
@@ -103,7 +105,7 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
               </span>
               <button
                 type="button"
-                disabled={redescribing}
+                disabled={redescribing || scopeApproved}
                 onClick={() => void redescribe()}
                 className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
@@ -143,10 +145,15 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
               {data.summary.modules} modules · {data.summary.useCases} use cases · {data.summary.files} files
             </h4>
             {saving && <span className="text-xs font-medium text-blue-700">Saving scope…</span>}
+            {scopeApproved && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+                🔒 Scope locked — approved
+              </span>
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label="Business modules">
             {data.modules.map((m) => (
-              <ModuleCard key={m.id} m={m} active={m.id === selectedId} disabled={saving} onPick={() => void pick(m)} />
+              <ModuleCard key={m.id} m={m} active={m.id === selectedId} disabled={saving || scopeApproved} onPick={() => void pick(m)} />
             ))}
           </div>
         </section>
