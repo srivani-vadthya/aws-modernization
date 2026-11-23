@@ -18,9 +18,9 @@ PHASE_ORDER = [
     "graph",
     "scope",
     "semantic-ir",
-    "requirements",
-    "backlog",
+    "user-stories",
     "modernize",
+    "test-scenarios",
     "tests",
     "failures",
     "artifacts",
@@ -28,14 +28,38 @@ PHASE_ORDER = [
 
 # Keyword-based fast-path classification (no LLM cost for obvious cases)
 _KEYWORD_MAP: list[tuple[list[str], str]] = [
-    (["graph", "akg", "knowledge graph", "dependency", "call graph", "ast", "relationship"], "graph"),
-    (["scope", "module", "capability", "boundary", "partition", "domain", "business module"], "scope"),
-    (["requirement", "rule", "spec", "functional", "business rule", "regulation"], "requirements"),
-    (["backlog", "story", "epic", "sprint", "ado", "points", "spike", "user story"], "backlog"),
-    (["technology", "framework", "modernize", "stack", "architecture", "target"], "modernize"),
-    (["test", "playwright", "e2e", "acceptance", "gherkin", "scenario"], "tests"),
-    (["discovery", "inventory", "classify", "asset", "scan"], "discovery"),
-    (["intake", "upload", "source", "git", "zip", "folder"], "intake"),
+    # intake — source upload, git, zip, folder
+    (["intake", "upload", "source", "git", "zip", "folder", "ingest", "repository", "repo"], "intake"),
+
+    # discovery — inventory, asset classification, language scan
+    (["discovery", "inventory", "classify", "asset", "scan", "language", "loc", "program", "cobol", "rpgle", "clle"], "discovery"),
+
+    # graph — application knowledge graph, AKG, dependencies
+    (["graph", "akg", "knowledge graph", "dependency", "call graph", "ast", "relationship", "node", "edge", "cluster", "bounded context"], "graph"),
+
+    # scope — business module selection, capability, wave
+    (["scope", "module", "capability", "boundary", "partition", "domain", "business module", "wave", "blast radius", "scope selection", "select module"], "scope"),
+
+    # semantic-ir — SIR generation, contracts, semantic representation
+    (["semantic ir", "sir", "semantic", "ir generation", "contract", "interface", "semantic representation", "regenerate sir", "sir generation"], "semantic-ir"),
+
+    # user-stories — user story generation, epics, features, personas, acceptance criteria
+    (["user stor", "user-stor", "epic", "feature", "persona", "acceptance criteria", "story point", "backlog", "sprint", "agile", "gherkin", "given when then"], "user-stories"),
+
+    # modernize — target technology, framework, architecture, stack
+    (["technology", "framework", "modernize", "stack", "architecture", "target", "dotnet", ".net", "java", "spring", "microservice", "cloud native", "aurora", "postgresql"], "modernize"),
+
+    # test-scenarios — test scenario generation, test cases, playwright scripts
+    (["test scenario", "test case", "test script", "playwright", "e2e", "end to end", "automation", "coverage", "test data"], "test-scenarios"),
+
+    # tests — generated tests, xunit, test run
+    (["test", "xunit", "unit test", "integration test", "test run", "test result", "failing test"], "tests"),
+
+    # failures — failure analysis, risk, error
+    (["failure", "fail", "error", "risk", "issue", "bug", "problem", "residual", "analysis"], "failures"),
+
+    # artifacts — final output, download, github, pack
+    (["artifact", "download", "pack", "github", "export", "publish", "final", "output", "deploy"], "artifacts"),
 ]
 
 
@@ -93,8 +117,31 @@ def classify_comment(comment: str, current_phase: str) -> tuple[str, str]:
     return phase, reasoning
 
 
+# Data keys to clear per phase and all phases after it
+_PHASE_DATA_KEYS: dict[str, list[tuple[str, str | None]]] = {
+    # (top-level key, seed sub-key or None)
+    "scope":        [("scope", None)],
+    "semantic-ir":  [("sirMeta", None), ("seed", "semantic_ir")],
+    "user-stories": [("userStories", None)],
+    "test-scenarios": [("testScenarios", None)],
+    "modernize":    [("seed", "target")],
+    "discovery":    [("seed", "applied_graph"), ("seed", "scope_analysis")],
+    "graph":        [("seed", "applied_graph"), ("seed", "scope_analysis")],
+}
+
+
+def _clear_phase_data(engagement: dict, phase: str) -> None:
+    """Clear the generated data for a specific phase."""
+    for top_key, sub_key in _PHASE_DATA_KEYS.get(phase, []):
+        if sub_key is None:
+            engagement.pop(top_key, None)
+        else:
+            if top_key in engagement and isinstance(engagement[top_key], dict):
+                engagement[top_key].pop(sub_key, None)
+
+
 def rollback_to_phase(engagement: dict, target_phase: str) -> None:
-    """Reset all gates from target_phase onwards.
+    """Reset all gates from target_phase onwards and clear generated data.
 
     Everything before target_phase is preserved intact.
     Mutates engagement in-place.
@@ -110,11 +157,13 @@ def rollback_to_phase(engagement: dict, target_phase: str) -> None:
             gates[phase]["decision"] = None
             gates[phase]["status"] = "review-needed" if phase == target_phase else "stale"
             gates[phase]["comment"] = None
+        # Clear generated data for this phase
+        _clear_phase_data(engagement, phase)
 
     engagement["currentPhase"] = target_phase
     engagement["status"] = f"hitl-{target_phase}"
     logger.info(
-        "HITL Orchestrator: rolled back engagement '%s' to phase='%s'",
+        "HITL Orchestrator: rolled back engagement '%s' to phase='%s' and cleared downstream data",
         engagement.get("id"),
         target_phase,
     )
