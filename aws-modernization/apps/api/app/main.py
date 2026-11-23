@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import ado, aws_intake, bedrock_skills, ingest, knowledge_graph, pack, playwright_gen, store
+from . import ado, aws_intake, bedrock_skills, hitl_orchestrator, ingest, knowledge_graph, pack, playwright_gen, store
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -408,16 +408,14 @@ def submit_orchestrator_feedback(eid: str, body: FeedbackIn):
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
-    
-    result = bedrock_skills.orchestrate_feedback(eng, body.comment, body.currentPhase)
+
+    result = hitl_orchestrator.run(eng, body.comment, body.currentPhase)
+
+    if not result["ok"]:
+        raise HTTPException(422, result.get("error", "HITL orchestration failed"))
+
     store.save(result["engagement"])
-    return {
-        "ok": True,
-        "targetPhase": result["targetPhase"],
-        "reasoning": result["reasoning"],
-        "actionTaken": result["actionTaken"],
-        "engagement": result["engagement"],
-    }
+    return result
 
 
 @app.post("/api/engagements/{eid}/gates/{phase}")

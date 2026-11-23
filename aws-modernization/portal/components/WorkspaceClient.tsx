@@ -12,6 +12,7 @@ export function WorkspaceClient({ initial }: { initial: Engagement }) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [feedbackResult, setFeedbackResult] = useState<{ targetPhase: string; reasoning: string; actionTaken: string } | null>(null);
   const [scope, setScope] = useState<string[]>(
     initial.scopedCapabilityIds.length
       ? initial.scopedCapabilityIds
@@ -43,6 +44,39 @@ export function WorkspaceClient({ initial }: { initial: Engagement }) {
     }
     setE(json);
     setComment("");
+  }
+
+  async function submitFeedback() {
+    if (!comment.trim()) {
+      setMessage("Please enter a comment before submitting feedback.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    setFeedbackResult(null);
+    try {
+      const res = await fetch(`/api/engagements/${e.id}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment, currentPhase: phase }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setMessage(json.error || "Feedback submission failed");
+        return;
+      }
+      setFeedbackResult({
+        targetPhase: json.targetPhase,
+        reasoning: json.reasoning,
+        actionTaken: json.actionTaken,
+      });
+      setE(json.engagement);
+      setComment("");
+    } catch {
+      setMessage("Network error — pipeline unchanged.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function exportAdo() {
@@ -159,8 +193,22 @@ export function WorkspaceClient({ initial }: { initial: Engagement }) {
               Reject
             </button>
           </div>
+          <button
+            disabled={busy || !comment.trim()}
+            onClick={() => void submitFeedback()}
+            className="mt-2 rounded-lg border border-[#7aa2ff] px-3 py-2 text-sm text-[#7aa2ff] disabled:opacity-40"
+          >
+            Submit Feedback
+          </button>
           {message && (
             <p className="mt-4 text-xs text-[#f0b429]">{message}</p>
+          )}
+          {feedbackResult && (
+            <div className="mt-4 rounded-lg border border-[#3dd6c6]/40 bg-[#0b1220] p-3 text-xs space-y-1">
+              <p className="text-[#3dd6c6] font-medium">↩ Routed to: {feedbackResult.targetPhase}</p>
+              <p className="text-[#93a0b8]">{feedbackResult.reasoning}</p>
+              <p className="text-[#e8eef8]">{feedbackResult.actionTaken}</p>
+            </div>
           )}
           <dl className="mt-6 space-y-2 text-xs text-[#93a0b8]">
             <div>Assets: {e.assets.length}</div>

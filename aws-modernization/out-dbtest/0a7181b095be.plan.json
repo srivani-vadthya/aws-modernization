@@ -1,0 +1,2680 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-20T10:54:36.597462+00:00",
+  "sourceEngine": "sqlserver",
+  "targetEngine": "azure-postgresql",
+  "tableCount": 26,
+  "tables": [
+    {
+      "name": "CLAIM",
+      "sourceName": "Claim",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMAMOUNT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Claim.cs",
+      "capability": "claim"
+    },
+    {
+      "name": "CLAIMSTATUS",
+      "sourceName": "ClaimStatus",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Claim.cs",
+      "capability": "claim"
+    },
+    {
+      "name": "CLAIMATTACHMENT",
+      "sourceName": "ClaimAttachment",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POSTEDDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILEURL",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Claim.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "CLAIMID",
+          "referencedTable": "CLAIM",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Claim.cs",
+      "capability": "claim"
+    },
+    {
+      "name": "CLIENT",
+      "sourceName": "Client",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ACCOUNTNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ISORGANIZATION",
+          "sourceType": "BIT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "BOOLEAN",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ORGANIZATIONNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "LASTNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FIRSTNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ADDRESS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CONTACTNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "EMAIL",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Client.cs",
+      "capability": "client"
+    },
+    {
+      "name": "OFFER",
+      "sourceName": "Offer",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DOCUMENTNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILENAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILEURL",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLIENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "CLIENTID",
+          "referencedTable": "CLIENT",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Client.cs",
+      "capability": "client"
+    },
+    {
+      "name": "OFFERSTATUS",
+      "sourceName": "OfferStatus",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Client.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Client.cs",
+      "capability": "platform"
+    },
+    {
+      "name": "DIRECTORY",
+      "sourceName": "Directory",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "COMPANYNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CONTACTNUMBERS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CONTACTPERSON",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ADDRESS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "EMAILADDRESS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DEPARTMENT",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Directory.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Directory.cs",
+      "capability": "directory"
+    },
+    {
+      "name": "FORM",
+      "sourceName": "Form",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILENAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILEURL",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INSURANCEPROVIDERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DOCUMENTTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "INSURANCEPROVIDERID",
+          "referencedTable": "INSURANCEPROVIDER",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "DOCUMENTTYPEID",
+          "referencedTable": "DOCUMENTTYPE",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Form.cs",
+      "capability": "form"
+    },
+    {
+      "name": "DOCUMENTTYPE",
+      "sourceName": "DocumentType",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Form.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Form.cs",
+      "capability": "form"
+    },
+    {
+      "name": "INVOICE",
+      "sourceName": "Invoice",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ISSUEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PAIDDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INVOICENUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "TOTALAMOUNTDUE",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ENDORSEMENTNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REBATE",
+          "sourceType": "FLOAT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "DOUBLE PRECISION",
+          "risk": "medium",
+          "conversionNote": "Verify float precision"
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ORNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "HASEWT",
+          "sourceType": "BIT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "BOOLEAN",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "AMOUNTPAID",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DUEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Invoice.cs",
+      "capability": "invoice"
+    },
+    {
+      "name": "INVOICESTATUS",
+      "sourceName": "InvoiceStatus",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Invoice.cs",
+      "capability": "invoice"
+    },
+    {
+      "name": "PARTICULAR",
+      "sourceName": "Particular",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PARTICULARAMOUNT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INVOICEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PARTICULARTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "INVOICEID",
+          "referencedTable": "INVOICE",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "PARTICULARTYPEID",
+          "referencedTable": "PARTICULARTYPE",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Invoice.cs",
+      "capability": "invoice"
+    },
+    {
+      "name": "PARTICULARTYPE",
+      "sourceName": "ParticularType",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Invoice.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Invoice.cs",
+      "capability": "invoice"
+    },
+    {
+      "name": "ACTIVITYLOG",
+      "sourceName": "ActivityLog",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "USERID",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ACTIVITYLOGTYPE",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "POSTEDDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "MESSAGE",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "AGENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMATTACHMENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLAIMSTATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLIENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DOCUMENTTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FORMID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INSURANCEPROVIDERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INVOICEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INVOICESTATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PARTICULARID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PARTICULARTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYATTACHMENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYSTATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "RISKID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ENDORSEMENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "SOAID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "SOASTATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "OFFERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "OFFERSTATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "AGENT",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "CLAIMATTACHMENT",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "CLAIM",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "CLAIMSTATUS",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "CLIENT",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "DOCUMENTTYPE",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "FORM",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "INSURANCEPROVIDER",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "INVOICE",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "INVOICESTATUS",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "PARTICULAR",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "PARTICULARTYPE",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "POLICY",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "POLICYATTACHMENT",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "POLICYSTATUS",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "POLICYTYPE",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "RISK",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "ENDORSEMENT",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "SOA",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "SOASTATUS",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "OFFER",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        },
+        {
+          "name": "OFFERSTATUS",
+          "sourceType": "UNKNOWN",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Logs.cs",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "AGENTID",
+          "referencedTable": "AGENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "CLAIMATTACHMENTID",
+          "referencedTable": "CLAIMATTACHMENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "CLAIMID",
+          "referencedTable": "CLAIM",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "CLAIMSTATUSID",
+          "referencedTable": "CLAIMSTATUS",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "CLIENTID",
+          "referencedTable": "CLIENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "DOCUMENTTYPEID",
+          "referencedTable": "DOCUMENTTYPE",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "FORMID",
+          "referencedTable": "FORM",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "INSURANCEPROVIDERID",
+          "referencedTable": "INSURANCEPROVIDER",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "INVOICEID",
+          "referencedTable": "INVOICE",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "INVOICESTATUSID",
+          "referencedTable": "INVOICESTATUS",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "PARTICULARID",
+          "referencedTable": "PARTICULAR",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "PARTICULARTYPEID",
+          "referencedTable": "PARTICULARTYPE",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYATTACHMENTID",
+          "referencedTable": "POLICYATTACHMENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYSTATUSID",
+          "referencedTable": "POLICYSTATUS",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYTYPEID",
+          "referencedTable": "POLICYTYPE",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "RISKID",
+          "referencedTable": "RISK",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "ENDORSEMENTID",
+          "referencedTable": "ENDORSEMENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "SOAID",
+          "referencedTable": "SOA",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "SOASTATUSID",
+          "referencedTable": "SOASTATUS",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "OFFERID",
+          "referencedTable": "OFFER",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "OFFERSTATUSID",
+          "referencedTable": "OFFERSTATUS",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Logs.cs",
+      "capability": "activitylog"
+    },
+    {
+      "name": "POLICY",
+      "sourceName": "Policy",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "SUMINSURED",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INCEPTIONDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DATEISSUED",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "EXPIRYDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PREMIUM",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "RATE",
+          "sourceType": "FLOAT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "DOUBLE PRECISION",
+          "risk": "medium",
+          "conversionNote": "Verify float precision"
+        },
+        {
+          "name": "POLICYNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "RENEWALPOLICYNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REBATE",
+          "sourceType": "FLOAT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "DOUBLE PRECISION",
+          "risk": "medium",
+          "conversionNote": "Verify float precision"
+        },
+        {
+          "name": "COMMISSION",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ADDRESS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLIENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "AGENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INSURANCEPROVIDERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "CLIENTID",
+          "referencedTable": "CLIENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "AGENTID",
+          "referencedTable": "AGENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "INSURANCEPROVIDERID",
+          "referencedTable": "INSURANCEPROVIDER",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYTYPEID",
+          "referencedTable": "POLICYTYPE",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policy"
+    },
+    {
+      "name": "INSURANCEPROVIDER",
+      "sourceName": "InsuranceProvider",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "insuranceprovider"
+    },
+    {
+      "name": "POLICYTYPE",
+      "sourceName": "PolicyType",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policytype"
+    },
+    {
+      "name": "AGENT",
+      "sourceName": "Agent",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "agent"
+    },
+    {
+      "name": "POLICYSTATUS",
+      "sourceName": "PolicyStatus",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policy"
+    },
+    {
+      "name": "POLICYATTACHMENT",
+      "sourceName": "PolicyAttachment",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POSTEDDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILENAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FILEURL",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policy"
+    },
+    {
+      "name": "RISK",
+      "sourceName": "Risk",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "AMOUNTINSURED",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "RATE",
+          "sourceType": "FLOAT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "DOUBLE PRECISION",
+          "risk": "medium",
+          "conversionNote": "Verify float precision"
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PREMIUM",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ADDRESS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policy"
+    },
+    {
+      "name": "ENDORSEMENT",
+      "sourceName": "Endorsement",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ISSUEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "EFFECTIVEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ENDORSEMENTNUMBER",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ENDORSEMENTAMOUNT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "TOTALENDORSEMENTAMOUNT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "MORTGAGEE",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "MT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "PT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DST",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "FST",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "VAT",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "POLICYID",
+          "referencedTable": "POLICY",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "policy"
+    },
+    {
+      "name": "DEFAULTREBATE",
+      "sourceName": "DefaultRebate",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "RATE",
+          "sourceType": "FLOAT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "DOUBLE PRECISION",
+          "risk": "medium",
+          "conversionNote": "Verify float precision"
+        },
+        {
+          "name": "INSURANCEPROVIDERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "POLICYTYPEID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Policy.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "INSURANCEPROVIDERID",
+          "referencedTable": "INSURANCEPROVIDER",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "POLICYTYPEID",
+          "referencedTable": "POLICYTYPE",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Policy.cs",
+      "capability": "defaultrebate"
+    },
+    {
+      "name": "SOA",
+      "sourceName": "Soa",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "ISSUEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STARTDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "DUEDATE",
+          "sourceType": "DATETIME2",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "TIMESTAMPTZ",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "REMARKS",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "TOTALAMOUNTDUE",
+          "sourceType": "DECIMAL(18,2)",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "NUMERIC(18,2)",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "CLIENTID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "STATUSID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "INSURANCEPROVIDERID",
+          "sourceType": "INT",
+          "primaryKey": false,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [
+        {
+          "column": "CLIENTID",
+          "referencedTable": "CLIENT",
+          "referencedColumn": "ID"
+        },
+        {
+          "column": "INSURANCEPROVIDERID",
+          "referencedTable": "INSURANCEPROVIDER",
+          "referencedColumn": "ID"
+        }
+      ],
+      "evidence": "IMS.Entity/Soa.cs",
+      "capability": "soa"
+    },
+    {
+      "name": "SOASTATUS",
+      "sourceName": "SoaStatus",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "INT",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "INTEGER",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "NAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.Entity/Soa.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.Entity/Soa.cs",
+      "capability": "soa"
+    },
+    {
+      "name": "APPLICATIONUSER",
+      "sourceName": "ApplicationUser",
+      "columns": [
+        {
+          "name": "FIRSTNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.WebMvc/Models/IdentityModels.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        },
+        {
+          "name": "LASTNAME",
+          "sourceType": "NVARCHAR(MAX)",
+          "primaryKey": false,
+          "nullable": true,
+          "evidence": "IMS.WebMvc/Models/IdentityModels.cs",
+          "targetType": "TEXT",
+          "risk": "low",
+          "conversionNote": ""
+        }
+      ],
+      "foreignKeys": [],
+      "evidence": "IMS.WebMvc/Models/IdentityModels.cs",
+      "capability": "identity"
+    }
+  ],
+  "risks": [
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.ACTIVITYLOGTYPE",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "ACTIVITYLOGTYPE"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.AGENT",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "AGENT"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.CLAIMATTACHMENT",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "CLAIMATTACHMENT"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.CLAIM",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "CLAIM"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.CLAIMSTATUS",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "CLAIMSTATUS"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.CLIENT",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "CLIENT"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.DOCUMENTTYPE",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "DOCUMENTTYPE"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.FORM",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "FORM"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.INSURANCEPROVIDER",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "INSURANCEPROVIDER"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.INVOICE",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "INVOICE"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.INVOICESTATUS",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "INVOICESTATUS"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.PARTICULAR",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "PARTICULAR"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.PARTICULARTYPE",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "PARTICULARTYPE"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.POLICY",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "POLICY"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.POLICYATTACHMENT",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "POLICYATTACHMENT"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.POLICYSTATUS",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "POLICYSTATUS"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.POLICYTYPE",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "POLICYTYPE"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.RISK",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "RISK"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.ENDORSEMENT",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "ENDORSEMENT"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.SOA",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "SOA"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.SOASTATUS",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "SOASTATUS"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.OFFER",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "OFFER"
+    },
+    {
+      "title": "High-risk type conversion: ACTIVITYLOG.OFFERSTATUS",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ACTIVITYLOG",
+      "column": "OFFERSTATUS"
+    },
+    {
+      "title": "No primary key: APPLICATIONUSER",
+      "severity": "high",
+      "description": "Table 'APPLICATIONUSER' has no primary key. PostgreSQL requires a PK for CDC replication.",
+      "remediation": "Add a surrogate primary key (SERIAL or UUID) before migration.",
+      "table": "APPLICATIONUSER"
+    }
+  ],
+  "migrationTool": "Azure Database Migration Service (DMS) + EF Core migrations",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Schema Preparation",
+      "description": "Review generated DDL, resolve HIGH/CRITICAL risk columns, add missing PKs.",
+      "tool": "Manual review + db_migration_model.py validate",
+      "risk": "low",
+      "steps": [
+        "Run: python migration_plan.py engagement.json --target azure-postgresql",
+        "Review schema.sql for HIGH/CRITICAL risk columns",
+        "Add surrogate PKs to tables flagged with no primary key",
+        "Confirm NUMERIC precision with business stakeholders for packed decimal fields"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Target Schema Deployment",
+      "description": "Deploy schema.sql to the azure-postgresql instance.",
+      "tool": "psql or Flyway",
+      "risk": "low",
+      "steps": [
+        "Create target database on azure-postgresql",
+        "Run: psql -h <host> -U <user> -d <db> -f schema.sql",
+        "Verify all tables created: SELECT tablename FROM pg_tables WHERE schemaname='public'"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Data Migration",
+      "description": "Migrate data from sqlserver to azure-postgresql using the recommended tool.",
+      "tool": "Azure Database Migration Service (DMS) + EF Core migrations",
+      "risk": "high",
+      "steps": [
+        "Configure Azure Database Migration Service (DMS) + EF Core migrations",
+        "Run initial full-load migration",
+        "Validate row counts per table",
+        "Run parity checks on HIGH-risk columns (packed decimal, date fields)"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "ORM & Application Cutover",
+      "description": "Update application ORM configuration to point to the new database.",
+      "tool": "orm-config/ generated files",
+      "risk": "medium",
+      "steps": [
+        "Replace existing ORM provider with generated orm-config/ files",
+        "Update connection string in appsettings.json / application.yml / database.py",
+        "Run application integration tests against the new database",
+        "Enable CDC dual-write for shared kernel tables"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Cutover & Validation",
+      "description": "Switch production traffic to the new database. Validate parity.",
+      "tool": "Bidirectional CDC Guardrail skill + differential-golden-run-comparator skill",
+      "risk": "critical",
+      "steps": [
+        "Enable bidirectional CDC for zero-downtime cutover",
+        "Run differential-golden-run-comparator skill for parity validation",
+        "Shift 10% traffic canary to new database",
+        "Monitor for 24h, then shift 100%",
+        "Decommission source database after 30-day observation period"
+      ]
+    }
+  ],
+  "detection": {
+    "sourceEngine": "sqlserver",
+    "sourceConfidence": "high",
+    "sourceEvidence": [
+      {
+        "evidence": "IMS.Data/App.config",
+        "rule": "SQL Server ADO.NET provider",
+        "source": "file-content"
+      },
+      {
+        "evidence": "IMS.Data/IMS.Data.csproj",
+        "rule": "EF SqlServer provider",
+        "source": "file-content"
+      },
+      {
+        "evidence": "IMS.WebMvc/IMS.WebMvc.csproj",
+        "rule": "EF SqlServer provider",
+        "source": "file-content"
+      },
+      {
+        "evidence": "IMS.WebMvc/Web.config",
+        "rule": "SQL Server ADO.NET provider",
+        "source": "file-content"
+      },
+      {
+        "evidence": "IMS.WebMvc/Web.Debug.config",
+        "rule": "SQL Server connection string",
+        "source": "file-content"
+      }
+    ],
+    "targetEngine": "azure-postgresql",
+    "allSourceVotes": {
+      "sqlserver": 6
+    }
+  },
+  "ormFiles": [
+    "ModernDbContext.cs",
+    "Entities.cs",
+    "connection-string.snippet.json",
+    "Program.snippet.cs"
+  ],
+  "ddlFile": "out-dbtest/0a7181b095be.sql",
+  "validation": {
+    "errors": [],
+    "warnings": [
+      "Table 'APPLICATIONUSER' has no primary key column"
+    ]
+  }
+}
