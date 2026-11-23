@@ -972,6 +972,37 @@ export const api = {
     fetch(`/api/engagements/${id}/terraform/azure`).then((r) =>
       parse<{ files: Record<string, string> }>(r),
     ),
+  codePushFiles: (id: string) =>
+    fetch(`/api/engagements/${id}/code-push/files`).then((r) =>
+      parse<{ demo: boolean; project: string; files: { path: string; language: string; content: string }[] }>(r),
+    ),
+  codePush: (
+    id: string,
+    payload: {
+      repo: string; token?: string; branch: string; base?: string; overwrite?: boolean;
+      message?: string; apply: boolean; confirm: boolean;
+    },
+  ) =>
+    fetch(`/api/engagements/${id}/code-push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then((r) =>
+      parse<{
+        repo: string;
+        branch: string;
+        defaultBranch?: string;
+        baseBranch?: string;
+        plan?: { path: string; action: "new" | "replace" | "skip" }[];
+        counts?: { new: number; replace: number; skip: number };
+        dryRun: boolean;
+        fileCount: number;
+        files: string[];
+        initialisedEmptyRepo?: boolean;
+        commitUrl?: string;
+        branchUrl?: string;
+      }>(r),
+    ),
   githubPublish: (
     id: string,
     payload: { repoName: string; token?: string; org?: string; private?: boolean },

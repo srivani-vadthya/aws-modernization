@@ -14,7 +14,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from . import ado, aws_intake, bedrock_skills, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, store, target_contract
-from . import ado, aws_intake, bedrock_skills, ingest, knowledge_graph, pack, playwright_gen, scope_modules, sir_generator, store, test_scenarios, user_stories
+from . import ado, aws_intake, bedrock_skills, code_push, ingest, knowledge_graph, pack, playwright_gen, scope_modules, sir_generator, store, test_scenarios, user_stories
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -1326,6 +1326,39 @@ def export_test_scenarios(eid: str, format: str = "zip"):
                         headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.md"'})
     return Response(test_scenarios.export_zip(eng), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.zip"'})
+
+
+class CodePushIn(BaseModel):
+    repo: str = ""
+    token: str | None = None  # used for this request only; never stored or logged
+    branch: str = "modernized-code"
+    base: str = ""  # branch to build on; empty = the repo default branch
+    overwrite: bool = False  # replace files that already exist on the base branch
+    message: str = ""
+    apply: bool = False
+    confirm: bool = False
+
+
+@app.get("/api/engagements/{eid}/code-push/files")
+def get_code_push_files(eid: str):
+    """The demo modernized project shown in the Code Modernization step."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return {"demo": True, "project": code_push.project_name(eng), "files": code_push.listing(eng)}
+
+
+@app.post("/api/engagements/{eid}/code-push")
+def post_code_push(eid: str, body: CodePushIn):
+    """Push the demo code to a NEW branch of a GitHub repo. Dry run unless apply and confirm are both true."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return code_push.push(eng, body.repo, body.token, body.branch, body.message, body.apply and body.confirm,
+                              body.base, body.overwrite)
+    except code_push.PushError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/engagements/{eid}/user-stories/push")

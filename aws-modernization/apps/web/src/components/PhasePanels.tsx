@@ -1,6 +1,7 @@
 import {type ReactNode, useEffect, useState} from 'react';
 
 import {api, type Engagement} from '../api';
+import {CodeModernizationPanel} from './CodeModernizationPanel';
 import {DiscoveryReport} from './DiscoveryReport';
 import {GraphView} from './GraphView';
 import {Cloud, Cpu, Server, ShieldCheck, Zap} from './Icons';
@@ -41,6 +42,9 @@ export function PhasePanels({
         case 'modernize':
             return <Modernize e={engagement} onChange={onChange} />;
 
+        case 'code modernization':
+        case 'backlog':
+            return <CodeModernizationPanel e={engagement} />;
         case 'test-scenarios':
             return <TestScenariosPanel e={engagement} onChange={onChange} />;
         case 'tests':

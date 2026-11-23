@@ -398,6 +398,7 @@ export function EngagementPage() {
                 </div>
 
                 {/* HITL Sign-off Gate Bar with Orchestrator Feedback Loop */}
+                {phase !== 'code modernization' && (
                 <GateBar
                     engagement={eng}
                     phase={phase}
@@ -451,6 +452,7 @@ export function EngagementPage() {
                               }
                     }
                 />
+                )}
             </main>
         </div>
     );
