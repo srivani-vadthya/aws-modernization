@@ -23,6 +23,8 @@ load_dotenv()
 app = FastAPI(title="Nexus Modernize", version="0.1.0")
 from .discovery_routes import router as discovery_router
 app.include_router(discovery_router)
+from .doc_generator_routes import router as doc_generator_router
+app.include_router(doc_generator_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
