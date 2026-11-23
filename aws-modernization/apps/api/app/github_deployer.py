@@ -9,7 +9,9 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -26,6 +28,29 @@ def get_github_token(custom_token: str | None = None) -> str | None:
     )
 
 
+def _repo_from_url(repo_url: str | None) -> tuple[str | None, str | None]:
+    if not repo_url:
+        return None, None
+    cleaned = repo_url.strip().rstrip("/")
+    if cleaned.endswith(".git"):
+        cleaned = cleaned[:-4]
+    match = re.search(r"github\.com[:/]+([^/]+)/([^/]+)$", cleaned, flags=re.IGNORECASE)
+    if not match:
+        return None, None
+    return match.group(1), match.group(2)
+
+
+def build_feature_branch_name(reference_number: str | None = None) -> str:
+    raw = (reference_number or os.getenv("USERSTORY_REFERENCE_NUMBER") or os.getenv("REFERENCE_NUMBER") or "Userstory").strip()
+    sanitized = re.sub(r"[^A-Za-z0-9]+", "", raw)
+    if not sanitized or sanitized.lower() in {"main", "master"}:
+        sanitized = "Userstory"
+    branch_name = f"feature/Userstory{sanitized}"
+    if branch_name.lower() in {"main", "master", "feature/main", "feature/master"}:
+        branch_name = "feature/Userstory"
+    return branch_name
+
+
 def create_or_update_repo(
     repo_name: str,
     files: dict[str, str],
@@ -33,6 +58,9 @@ def create_or_update_repo(
     token: str | None = None,
     org: str | None = None,
     private: bool = True,
+    branch: str | None = None,
+    repo_url: str | None = None,
+    reference_number: str | None = None,
 ) -> dict[str, Any]:
     """Create a new GitHub repository (or use existing) and commit the generated codebase via GitHub REST API."""
     gh_token = get_github_token(token)
@@ -42,6 +70,18 @@ def create_or_update_repo(
             "error": "GitHub Personal Access Token (GITHUB_TOKEN) is not configured.",
             "instructions": "Provide a GitHub Personal Access Token with 'repo' scope to publish automatically.",
         }
+
+    repo_target = repo_url or os.getenv("BACKEND_REPO")
+    if repo_target:
+        repo_owner, repo_slug = _repo_from_url(repo_target)
+        if repo_owner and repo_slug:
+            org = org or repo_owner
+            repo_name = repo_slug
+
+    if branch and branch.lower() in {"main", "master"}:
+        branch = build_feature_branch_name(reference_number)
+    elif not branch:
+        branch = build_feature_branch_name(reference_number)
 
     headers = {
         "Authorization": f"Bearer {gh_token}",
@@ -61,11 +101,10 @@ def create_or_update_repo(
         target_owner = org or current_user
 
         # 2. Check if repo exists or create it
-        repo_url = f"https://api.github.com/repos/{target_owner}/{repo_name}"
-        check_res = client.get(repo_url, headers=headers)
+        repo_url_api = f"https://api.github.com/repos/{target_owner}/{repo_name}"
+        check_res = client.get(repo_url_api, headers=headers)
 
         if check_res.status_code == 404:
-            # Create repo
             create_endpoint = (
                 f"https://api.github.com/orgs/{org}/repos" if org else "https://api.github.com/user/repos"
             )
@@ -90,23 +129,48 @@ def create_or_update_repo(
                 "error": f"Error accessing repository '{target_owner}/{repo_name}': {check_res.text[:200]}",
             }
 
+        default_branch = check_res.json().get("default_branch") if check_res.status_code == 200 else "main"
+        branch_ref = f"refs/heads/{branch}"
+        branch_ref_path = quote(branch_ref.replace("refs/heads/", ""), safe="")
+        _branch_check = client.get(
+            f"https://api.github.com/repos/{target_owner}/{repo_name}/git/ref/heads/{branch_ref_path}",
+            headers=headers,
+        )
+        if _branch_check.status_code == 404:
+            base_ref = client.get(f"https://api.github.com/repos/{target_owner}/{repo_name}/git/ref/heads/{quote(default_branch, safe='')}", headers=headers)
+            if base_ref.status_code != 200:
+                return {
+                    "ok": False,
+                    "error": f"Unable to resolve default branch '{default_branch}' for repository '{target_owner}/{repo_name}'.",
+                }
+            base_sha = base_ref.json()["object"]["sha"]
+            create_branch_res = client.post(
+                f"https://api.github.com/repos/{target_owner}/{repo_name}/git/refs",
+                headers=headers,
+                json={"ref": branch_ref, "sha": base_sha},
+            )
+            if create_branch_res.status_code not in (200, 201):
+                return {
+                    "ok": False,
+                    "error": f"Failed to create branch '{branch}' in '{target_owner}/{repo_name}': {create_branch_res.text[:200]}",
+                }
+
         # 3. Commit files using GitHub REST API contents endpoint
         committed_files = []
         for path_str, content in files.items():
             content_bytes = content.encode("utf-8") if isinstance(content, str) else content
             b64_content = base64.b64encode(content_bytes).decode("utf-8")
             file_url = f"https://api.github.com/repos/{target_owner}/{repo_name}/contents/{path_str}"
-
-            # Check if file exists to get its SHA for update
+            branch_query = quote(branch, safe="")
             sha = None
-            f_check = client.get(file_url, headers=headers)
+            f_check = client.get(f"{file_url}?ref={branch_query}", headers=headers)
             if f_check.status_code == 200:
                 sha = f_check.json().get("sha")
 
             put_body = {
                 "message": f"feat: add {path_str}",
                 "content": b64_content,
-                "branch": "main",
+                "branch": branch,
             }
             if sha:
                 put_body["sha"] = sha
@@ -122,6 +186,7 @@ def create_or_update_repo(
             "repoUrl": html_url,
             "owner": target_owner,
             "repoName": repo_name,
+            "branch": branch,
             "filesCommitted": len(committed_files),
             "workflowUrl": f"{html_url}/actions",
         }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type AppliedGraph, type WorkflowChain, type SharedKernel } from "../api";
+import { api, type AppliedGraph, type WorkflowChain, type SharedKernel, type CodeWorkflow } from "../api";
 import { AKGGraphView } from "./AKGGraphView";
 
 // ─── colour maps ────────────────────────────────────────────────────────────
@@ -19,6 +19,9 @@ const ROLE_CLS: Record<string, string> = {
   "event-publisher":     "bg-teal-100 text-teal-700",
   "business-logic":      "bg-slate-100 text-slate-600",
   "domain-event":        "bg-emerald-100 text-emerald-700",
+  "data-entity":         "bg-emerald-100 text-emerald-700",
+  "integration-adapter": "bg-orange-100 text-orange-700",
+  "external-system":     "bg-orange-100 text-orange-700",
 };
 
 const EDGE_CLS: Record<string, string> = {
@@ -30,7 +33,17 @@ const EDGE_CLS: Record<string, string> = {
   OWNS_DATA:    "text-emerald-700 bg-emerald-50 border-emerald-200",
   EMITS_EVENT:  "text-teal-700 bg-teal-50 border-teal-200",
   CONTAINS:     "text-slate-600 bg-slate-50 border-slate-200",
+  ACCESSES_DATA:    "text-red-700 bg-red-50 border-red-200",
+  HTTP_CALLS:       "text-pink-700 bg-pink-50 border-pink-200",
+  INVOKES_EXTERNAL: "text-orange-700 bg-orange-50 border-orange-200",
+  REFERENCES:       "text-emerald-700 bg-emerald-50 border-emerald-200",
+  INHERITS:         "text-slate-600 bg-slate-50 border-slate-200",
+  IMPLEMENTS:       "text-slate-600 bg-slate-50 border-slate-200",
 };
+
+function location(file?: string, line?: number) {
+  return file ? `${file}:${line ?? 1}` : "—";
+}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -50,16 +63,17 @@ function shortId(id: string) {
 
 // ─── types ──────────────────────────────────────────────────────────────────
 
-type Tab = "graph" | "overview" | "nodes" | "edges" | "lineage" | "chains" | "kernels";
+type Tab = "graph" | "overview" | "nodes" | "edges" | "lineage" | "workflows" | "chains" | "kernels";
 
 const TABS: [Tab, string][] = [
-  ["graph",    "Graph View"],
-  ["overview", "Overview"],
-  ["nodes",    "Semantic Nodes"],
-  ["edges",    "Edge Semantics"],
-  ["lineage",  "Data Lineage"],
-  ["chains",   "Workflow Chains"],
-  ["kernels",  "Shared Kernels"],
+  ["graph",     "Graph View"],
+  ["overview",  "Overview"],
+  ["nodes",     "Semantic Nodes"],
+  ["edges",     "Edge Semantics"],
+  ["lineage",   "Data Lineage"],
+  ["workflows", "Code Workflows"],
+  ["chains",    "Workflow Chains"],
+  ["kernels",   "Shared Kernels"],
 ];
 
 // ─── component ──────────────────────────────────────────────────────────────
@@ -114,7 +128,17 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
     [graph, q],
   );
 
+  const filteredWorkflows = useMemo(
+    () => (graph?.codeWorkflows ?? []).filter(
+      (w) => !q || w.entryPoint.toLowerCase().includes(q)
+        || (w.trigger?.url ?? "").toLowerCase().includes(q)
+        || w.writes.some((x) => x.toLowerCase().includes(q))
+    ),
+    [graph, q],
+  );
+
   const stats = graph?.statistics;
+  const hasCodeWorkflows = (graph?.codeWorkflows?.length ?? 0) > 0;
 
   return (
     <section className="rounded-xl border border-indigo-200 bg-white shadow-sm overflow-hidden">
@@ -165,12 +189,15 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
               ["Nodes",          stats.totalNodes],
               ["Edges",          stats.totalEdges],
               ["Lineage Fields", stats.dataLineageFields],
-              ["Chains",         stats.totalWorkflowChains],
-              ["Traced",         `${stats.tracedWorkflowChains}/${stats.totalWorkflowChains}`],
+              ...(hasCodeWorkflows
+                ? [["Workflows", stats.codeWorkflows ?? 0],
+                   ["Fully Traced", `${stats.fullyTracedCodeWorkflows ?? 0}/${stats.codeWorkflows ?? 0}`]]
+                : [["Chains", stats.totalWorkflowChains],
+                   ["Traced", `${stats.tracedWorkflowChains}/${stats.totalWorkflowChains}`]]),
               ["Shared Kernels", stats.sharedKernelCount],
             ] as [string, string | number][]).map(([label, val]) => (
               <div key={label} className="py-3 px-2">
-                <p className="text-base font-bold text-slateate-900">{val}</p>
+                <p className="text-base font-bold text-slate-900">{val}</p>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide">{label}</p>
               </div>
             ))}
@@ -298,7 +325,29 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
                   )}
                 </div>
 
+                {/* Extraction diagnostics: what could not be resolved, never silently guessed */}
+                {graph.diagnostics && Object.keys(graph.diagnostics).length > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mb-2">
+                      Extraction Diagnostics
+                    </p>
+                    <div className="space-y-1.5">
+                      {Object.entries(graph.diagnostics).map(([key, rows]) => (
+                        <details key={key} className="rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs">
+                          <summary className="cursor-pointer font-medium text-amber-800">
+                            {key.replace(/([A-Z])/g, " $1").toLowerCase()} · {rows.length}
+                          </summary>
+                          <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-slate-600">
+                            {rows.slice(0, 50).map((r) => (typeof r === "string" ? r : JSON.stringify(r))).join("\n")}
+                          </pre>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-slate-400 italic">{graph.basis}</p>
+                {graph.engine && <p className="text-[10px] text-slate-400 font-mono">engine: {graph.engine}</p>}
               </div>
             )}
 
@@ -359,7 +408,7 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
                       <th className="px-3 py-2.5">Kind</th>
                       <th className="px-3 py-2.5">Target</th>
                       <th className="px-3 py-2.5">Semantic Type</th>
-                      <th className="px-3 py-2.5">Modern Equivalent</th>
+                      <th className="px-3 py-2.5">Evidence</th>
                       <th className="px-3 py-2.5">Risk</th>
                     </tr>
                   </thead>
@@ -376,6 +425,9 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
                           <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${EDGE_CLS[e.kind] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
                             {e.kind}
                           </span>
+                          {e.operations && (
+                            <span className="block mt-1 text-[9px] font-mono text-slate-500">{e.operations.join(" + ")}</span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 font-mono text-[11px] text-slate-700 max-w-[130px]" title={e.target}>
                           <span className="block truncate">{shortId(e.target)}</span>
@@ -383,9 +435,17 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
                             <span className="text-[9px] text-slate-400 truncate block">{e.target.split(":")[0]}</span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-[11px] text-slate-600">{e.semanticType ?? "—"}</td>
-                        <td className="px-3 py-2.5 text-[11px] text-slate-500 max-w-[180px] truncate" title={e.modernEquivalent}>
-                          {e.modernEquivalent ?? "—"}
+                        <td className="px-3 py-2.5 text-[11px] text-slate-600" title={e.modernEquivalent}>{e.semanticType ?? "—"}</td>
+                        <td
+                          className="px-3 py-2.5 font-mono text-[10px] text-slate-600 max-w-[220px]"
+                          title={(e.evidence ?? []).map((ev) => `${ev.file}:${ev.line} [${ev.rule_id}]`).join("\n")}
+                        >
+                          <span className="block truncate">{location(e.file, e.line)}</span>
+                          {e.rule_id && (
+                            <span className="block truncate text-[9px] text-slate-400">
+                              {e.rule_id}{(e.evidence?.length ?? 0) > 1 ? ` · +${e.evidence!.length - 1} sites` : ""}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">{riskBadge(e.migrationRisk)}</td>
                       </tr>
@@ -403,7 +463,8 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
               <div className="space-y-2">
                 {filteredLineage.length === 0 && (
                   <p className="text-sm text-slate-500">
-                    No field lineage available. Lineage is derived from copybook schemas.
+                    No field lineage available. Lineage is derived from mapping declarations (AutoMapper) and the
+                    source&apos;s own data model (EF migration snapshot or copybooks); nothing is synthesised.
                   </p>
                 )}
                 {filteredLineage.map((l) => (
@@ -423,8 +484,84 @@ export function AppliedKnowledgeGraph({ engagementId }: { engagementId: string }
                     {l.conversionNote && (
                       <p className="mt-1.5 text-[11px] text-slate-500 italic">{l.conversionNote}</p>
                     )}
+                    {l.file && (
+                      <p className="mt-1 font-mono text-[10px] text-slate-400">
+                        {l.entityProperty && <>via {l.entityProperty} · </>}{location(l.file, l.line)} · {l.rule_id}
+                      </p>
+                    )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* ── CODE WORKFLOWS ── */}
+            {tab === "workflows" && (
+              <div className="space-y-2">
+                {filteredWorkflows.length === 0 && (
+                  <p className="text-sm text-slate-500">
+                    No code workflows. Workflows are traced from front-end HTTP calls, public controller actions and
+                    Application_Start through calls to data writes and external integrations.
+                  </p>
+                )}
+                {filteredWorkflows.map((w: CodeWorkflow) => {
+                  const open = openChain === w.id;
+                  return (
+                    <div key={w.id} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setOpenChain(open ? null : w.id)}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 transition"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-[10px] text-slate-400 shrink-0">{open ? "▼" : "▶"}</span>
+                          {w.trigger && (
+                            <span className="shrink-0 rounded border border-pink-200 bg-pink-50 px-1.5 py-0.5 font-mono text-[10px] font-bold text-pink-700">
+                              {w.trigger.verb}
+                            </span>
+                          )}
+                          <span className="font-mono text-xs font-semibold text-slate-800 truncate" title={w.entryPoint}>
+                            {w.trigger ? w.trigger.url : w.entryPoint.split(".").slice(-2).join(".")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {w.writes.map((x) => (
+                            <span key={x} className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 font-mono text-[10px] text-red-700">
+                              ✎ {shortId(x.split(".").pop() ?? x)}
+                            </span>
+                          ))}
+                          {w.externals.map((x) => (
+                            <span key={x} className="rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 font-mono text-[10px] text-orange-700">
+                              ⇢ {x.split(".").pop()}
+                            </span>
+                          ))}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${w.fullyTraced ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                            {w.fullyTraced ? "✓ Fully traced" : "read-only / partial"}
+                          </span>
+                        </div>
+                      </button>
+                      {open && (
+                        <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs">
+                          <p className="mb-2 font-mono text-[10px] text-slate-500">
+                            entry {w.entryPoint} · {w.entryKind} · {location(w.file, w.line)}
+                          </p>
+                          <ol className="space-y-1">
+                            {w.steps.map((s, i) => (
+                              <li key={i} className="flex flex-wrap items-center gap-2 font-mono text-[10px]" style={{ paddingLeft: (s.depth - 1) * 14 }}>
+                                <span className={`rounded border px-1.5 py-0.5 font-bold ${EDGE_CLS[s.kind] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                                  {s.kind}{s.operation ? ` · ${s.operation}` : ""}
+                                </span>
+                                <span className="text-slate-500">{s.from.split(".").slice(-2).join(".")}</span>
+                                <span className="text-slate-300">→</span>
+                                <span className="text-slate-800">{s.to.split(".").slice(-2).join(".")}</span>
+                                <span className="text-slate-400">{location(s.file, s.line)}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

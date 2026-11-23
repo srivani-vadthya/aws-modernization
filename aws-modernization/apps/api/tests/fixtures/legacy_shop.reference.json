@@ -1,0 +1,61 @@
+{
+  "description": "Hand-checked reference for tests/fixtures/legacy_shop. Every listed source is closed: the reference names all of its edges for every kind below.",
+  "closedSources": [
+    "Shop.Data.ShopContext", "Shop.Data.UnitOfWork", "Shop.Data.GenericRepository",
+    "Shop.Data.Repositories.OrderRepository", "Shop.Data.Repositories.OrderLineRepository",
+    "Shop.Data.Repositories.CustomerRepository", "Shop.Data.Repositories.OrderStatusRepository",
+    "Shop.Web.Controllers.BaseApiController", "Shop.Web.Controllers.OrdersApiController",
+    "Shop.Web.Controllers.CustomersController", "Shop.Web.Services.NotificationService",
+    "Shop.Web.Services.Logger", "Shop.Web.WebApiApplication", "Shop.Web.MapConfig", "Shop.Web.WebApiConfig",
+    "Shop.Entities.Order", "Shop.Entities.OrderLine", "Shop.Entities.Customer", "Shop.Entities.OrderStatus",
+    "Shop.Web.Models.OrderModel", "Shop.Web.Models.CustomerModel",
+    "ts:Shop.Web/Scripts/app/orders/ordersCtrl.ts", "view:Shop.Web/Views/Customers/Index.cshtml"
+  ],
+  "edges": [
+    {"kind": "CALLS", "source": "Shop.Data.ShopContext", "target": "Shop.Data.Configurations.OrderConfiguration"},
+    {"kind": "CALLS", "source": "Shop.Data.UnitOfWork", "target": "Shop.Data.ShopContext"},
+    {"kind": "CALLS", "source": "Shop.Data.UnitOfWork", "target": "Shop.Data.Repositories.OrderRepository"},
+    {"kind": "CALLS", "source": "Shop.Data.UnitOfWork", "target": "Shop.Data.Repositories.OrderLineRepository"},
+    {"kind": "CALLS", "source": "Shop.Data.UnitOfWork", "target": "Shop.Data.Repositories.CustomerRepository"},
+    {"kind": "CALLS", "source": "Shop.Data.UnitOfWork", "target": "Shop.Data.Repositories.OrderStatusRepository"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.BaseApiController", "target": "Shop.Data.UnitOfWork"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.BaseApiController", "target": "Shop.Web.Services.Logger"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.CustomersController", "target": "Shop.Data.UnitOfWork"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Web.Services.NotificationService"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Data.UnitOfWork"},
+    {"kind": "CALLS", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Web.Services.Logger"},
+    {"kind": "CALLS", "source": "Shop.Web.WebApiApplication", "target": "Shop.Web.MapConfig"},
+
+    {"kind": "ACCESSES_DATA", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Entities.Order"},
+    {"kind": "ACCESSES_DATA", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Entities.OrderLine"},
+    {"kind": "ACCESSES_DATA", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Entities.OrderStatus"},
+    {"kind": "ACCESSES_DATA", "source": "Shop.Web.Controllers.CustomersController", "target": "Shop.Entities.Customer"},
+
+    {"kind": "INHERITS", "source": "Shop.Data.Repositories.OrderRepository", "target": "Shop.Data.GenericRepository"},
+    {"kind": "INHERITS", "source": "Shop.Data.Repositories.OrderLineRepository", "target": "Shop.Data.GenericRepository"},
+    {"kind": "INHERITS", "source": "Shop.Data.Repositories.CustomerRepository", "target": "Shop.Data.GenericRepository"},
+    {"kind": "INHERITS", "source": "Shop.Data.Repositories.OrderStatusRepository", "target": "Shop.Data.GenericRepository"},
+    {"kind": "INHERITS", "source": "Shop.Web.Controllers.OrdersApiController", "target": "Shop.Web.Controllers.BaseApiController"},
+
+    {"kind": "REFERENCES", "source": "Shop.Entities.Order", "target": "Shop.Entities.Customer"},
+    {"kind": "REFERENCES", "source": "Shop.Entities.Order", "target": "Shop.Entities.OrderStatus"},
+    {"kind": "REFERENCES", "source": "Shop.Entities.Order", "target": "Shop.Entities.OrderLine"},
+    {"kind": "REFERENCES", "source": "Shop.Entities.OrderLine", "target": "Shop.Entities.Order"},
+    {"kind": "REFERENCES", "source": "Shop.Entities.Customer", "target": "Shop.Entities.Order"},
+
+    {"kind": "MAPS_TO", "source": "Shop.Entities.Order", "target": "Shop.Web.Models.OrderModel"},
+    {"kind": "MAPS_TO", "source": "Shop.Web.Models.OrderModel", "target": "Shop.Entities.Order"},
+    {"kind": "MAPS_TO", "source": "Shop.Entities.Customer", "target": "Shop.Web.Models.CustomerModel"},
+
+    {"kind": "HTTP_CALLS", "source": "ts:Shop.Web/Scripts/app/orders/ordersCtrl.ts", "target": "Shop.Web.Controllers.OrdersApiController"},
+
+    {"kind": "INVOKES_EXTERNAL", "source": "Shop.Web.Services.NotificationService", "target": "external:System.Net.Mail.SmtpClient"},
+
+    {"kind": "READS_CONFIG", "source": "Shop.Data.ShopContext", "target": "config:ConnectionName"},
+
+    {"kind": "RENDERS", "source": "Shop.Web.Controllers.CustomersController", "target": "view:Shop.Web/Views/Customers/Index.cshtml"},
+    {"kind": "BINDS_MODEL", "source": "view:Shop.Web/Views/Customers/Index.cshtml", "target": "Shop.Web.Models.CustomerModel"},
+    {"kind": "INCLUDES", "source": "view:Shop.Web/Views/Customers/Index.cshtml", "target": "view:Shop.Web/Views/Shared/_Status.cshtml"},
+    {"kind": "HOSTS_SCRIPT", "source": "view:Shop.Web/Views/Customers/Index.cshtml", "target": "ts:Shop.Web/Scripts/app/orders/ordersCtrl.ts"}
+  ]
+}

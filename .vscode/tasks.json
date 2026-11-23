@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "./${workspaceFolder}/c:/Users/DigitalPortals/AppData/Roaming/Code/User/workspaceStorage/63f28922d71731511ea8171ad22898ce/ms-dotnettools.csdevkit/aws-modernization.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "publish",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "publish",
+                "./${workspaceFolder}/c:/Users/DigitalPortals/AppData/Roaming/Code/User/workspaceStorage/63f28922d71731511ea8171ad22898ce/ms-dotnettools.csdevkit/aws-modernization.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "watch",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "watch",
+                "run",
+                "--project",
+                "${workspaceFolder}/aws-modernization/apps/api/data/engagements/14798cd01310/artifacts/ims-modernized-service/backend/IMS.Modernized.WebAPI.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}

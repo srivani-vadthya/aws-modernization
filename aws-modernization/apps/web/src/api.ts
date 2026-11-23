@@ -32,6 +32,9 @@ export type Engagement = {
     name: string;
     programs: { id: string; name: string }[];
     tables: { id: string }[];
+    /** Files and use cases of the selected module, derived from the AKG/AST (not hardcoded). */
+    files?: ScopeFile[];
+    useCases?: ScopeUseCase[];
     sharedServices?: {
       resourceId: string;
       kind: "program" | "table";
@@ -52,6 +55,236 @@ export type Engagement = {
   }[];
   adoExport: { mode: string; message?: string; org?: string; project?: string; workItems: unknown[]; results?: unknown[] } | null;
   awsIntake?: { uri: string; uploadedAt: string; encryption: string } | null;
+  sirMeta?: {
+    capabilityId: string;
+    generatedAt: string;
+    basis: string;
+    contracts: number;
+    llm: { status: "ok" | "unavailable" | "skipped"; model: string | null; lifted: number };
+  };
+  userStories?: UserStoriesState | null;
+  testScenarios?: TestScenariosState | null;
+};
+
+export type ScopeUseCase = {
+  id: string;
+  name: string;
+  entry: string;
+  entryPoint: string;
+  mutates: boolean;
+  reads: string[];
+  writes: string[];
+  externals: string[];
+  description: string | null;
+};
+
+export type ScopeFile = {
+  path: string;
+  kind: string;
+  language: string;
+  loc: number;
+  symbols: string[];
+  shared: boolean;
+  inUseCase: boolean;
+  roles?: string[];
+};
+
+export type ScopeModule = {
+  id: string;
+  name: string;
+  displayName: string | null;
+  summary: string;
+  businessSummary: string | null;
+  shared: boolean;
+  metrics: { programs: number; tables: number; screens: number; files: number; useCases: number; loc: number; evidenceEdges: number };
+  risk: string;
+  riskScore?: number | null;
+  /** Suggested modernization order (1 = modernize first), derived from AKG/AST coupling evidence. */
+  modernization?: { rank: number; score: number; reason: string };
+  coupling: string;
+  cohesion?: number | null;
+  boundary?: string | null;
+  ownedTables: string[];
+  sharedKernels: string[];
+  dependsOn: string[];
+  evidenceKinds: string[];
+  useCases: ScopeUseCase[];
+  files: ScopeFile[];
+};
+
+export type ScopeModules = {
+  modules: ScopeModule[];
+  enrichment: { status: "llm" | "deterministic" | "unavailable"; model: string | null; note: string; generatedAt: string };
+  summary: { modules: number; useCases: number; files: number };
+  basis: string;
+  digest: string;
+};
+
+export type EstimationFactor = { level: 1 | 2 | 3 | 4 | 5; label: string; evidence: string[] };
+
+/** Business complexity only: Business rules + Process scope + Business uncertainty (1-5 each), on Fibonacci. */
+export type StoryEstimation = {
+  rules?: EstimationFactor;
+  scope?: EstimationFactor;
+  uncertainty?: EstimationFactor;
+  factorSum?: number;
+  points: number;
+  reference?: string;
+  notes?: string[];
+};
+
+export type Story = {
+  id: string;
+  type: "functional" | "flow" | "enabler";
+  title: string;
+  narrative: { asA: string; iWant: string; soThat: string };
+  description: string;
+  acceptanceCriteria: string[];
+  storyPoints: number;
+  priority: "Must" | "Should" | "Could" | "Won't";
+  labels: string[];
+  narrativeSource: "template" | "refined";
+  definitionOfDone?: string[];
+  estimation?: StoryEstimation;
+  /** The legacy behaviour the story preserves, e.g. "ReassignActivity". */
+  behaviour?: string;
+  /** Set once a person has edited the story card. */
+  edited?: boolean;
+  trustBoundary?: string;
+  classification?: string;
+  trace: { sirId: string; ruleId: string | null; ruleIds?: (string | null)[]; legacyLines: string; snippet: string; astNode: string };
+};
+
+
+export type TestCategory = "positive" | "negative" | "validation" | "edge" | "exception";
+export type TestScenario = {
+  id: string; storyId: string; storyTitle: string; feature: string; epic: string; title: string;
+  category: TestCategory; origin: "criterion" | "derived"; criterionIndex: number | null; criterion: string | null;
+  ruleRefs: string[]; needsReview: boolean; caseIds: string[];
+};
+export type TestCase = {
+  id: string; scenarioId: string; storyId: string; name: string; category: TestCategory; priority: string;
+  description: string; preconditions: string[]; steps: string[]; testData: { name: string; value: string; source: string }[];
+  expected: string[]; ruleRefs: string[]; origin: "criterion" | "derived"; needsReview: boolean;
+};
+export type TestDataItem = { id: string; kind: string; name: string; value: string; source: string; usedBy: string[] };
+export type CoverageStory = {
+  storyId: string; title: string; feature: string; epic: string; covered: boolean; scenarioIds: string[];
+  byCategory: Record<TestCategory, number>;
+  criteria: { index: number; text: string; category: TestCategory; scenarioIds: string[] }[];
+};
+export type TestResultStatus = "passed" | "failed" | "skipped" | "not-run";
+export type TestRun = {
+  id: string; at: string; mode: "checks" | "live"; baseUrl: string | null;
+  liveStatus: "not-requested" | "completed" | "setup-required" | "unavailable" | "failed"; liveReason: string | null;
+  total: number; summary: Record<TestResultStatus, number>;
+  results: { caseId: string; scenarioId: string; status: TestResultStatus; message: string; durationMs: number | null;
+             live: boolean; checks: { name: string; ok: boolean; detail: string }[] }[];
+};
+export type TestScenariosState = {
+  generatedAt: string; sourceDigest: string; scope: string | null; scenarios: TestScenario[]; cases: TestCase[];
+  testData: TestDataItem[]; coverage: CoverageStory[]; files: Record<string, string>; runs: TestRun[];
+  counts: { scenarios: number; cases: number; stories: number; criteria: number; criteriaCovered: number; needsReview: number;
+            byCategory: Record<TestCategory, number> };
+};
+export type TestScenariosResponse = { testScenarios: TestScenariosState | null; stale: boolean };
+
+export type StoryEdit = Partial<Pick<Story, "title" | "description" | "acceptanceCriteria" | "labels" | "storyPoints">>;
+
+/** A business area (e.g. "Invoice", "SOA"); each of its stories is one use case. */
+export type Feature = {
+  id: string;
+  title: string;
+  description: string;
+  sirIds?: string[];
+  /** Older backlogs: one feature per SIR contract. */
+  sirId?: string;
+  stateMachine?: string;
+  sideEffects?: string[];
+  narrativeSource: string;
+  definitionOfDone?: string[];
+  legacyAssessment?: {
+    paradigm: string;
+    uplift: number;
+    regressionScope: string[];
+    factors: { category: string; finding: string; evidence: string; points: number; question?: string }[];
+  } | null;
+  stories: Story[];
+};
+
+export type Epic = {
+  id: string;
+  title: string;
+  module: string;
+  description: string;
+  businessOutcome: string;
+  approach?: string;
+  definitionOfDone?: string[];
+  labels: string[];
+  features: Feature[];
+};
+
+export type Backlog = {
+  schemaVersion: string;
+  generatedAt: string;
+  estimationModel?: {
+    method?: string;
+    reference?: { title: string; description: string; rules: number; scope: number; uncertainty: number; points: number; storyId?: string };
+  };
+  epics: Epic[];
+  openQuestions: { id: string; storyId: string | null; question: string }[];
+};
+
+export type UserStoriesState = {
+  generatedAt: string;
+  scope: string | null;
+  sirIds: string[];
+  backlog: Backlog;
+  counts: {
+    epics: number; features: number; stories: number; storyPoints: number; refined: number; template: number; openQuestions: number;
+  };
+  validation: { level: "ERROR" | "WARN"; message: string }[];
+  refinement: { status: "llm" | "partial" | "unavailable" | "skipped"; model: string | null; refined: number; total: number; rejected: { storyId: string; reason: string }[] };
+  epicDetermination: { status: "llm" | "deterministic"; model: string | null };
+  files: string[];
+  commands: string[];
+  lastPush: { provider: string; label: string; target: string; at: string; summary: Record<string, number>; items: { id: string; level: string; action: string; key?: string; url?: string }[] } | null;
+};
+
+export type TrackerProvider = {
+  id: "jira" | "ado" | "bitbucket" | "github";
+  label: string;
+  configured: boolean;
+  missing: string[];
+  settings: Record<string, string>;
+  secrets: Record<string, boolean>;
+  required: string[];
+  envVars: Record<string, string>;
+};
+
+export type PushRow = {
+  id: string;
+  level: "epic" | "feature" | "story";
+  title: string;
+  parent: string | null;
+  action: "create" | "created" | "exists" | "folded" | "skipped" | "blocked" | "failed";
+  key?: string;
+  url?: string;
+  note?: string;
+  error?: string;
+  payload?: { method: string; url: string; body: unknown };
+};
+
+export type PushReport = {
+  provider: string;
+  label: string;
+  target: string;
+  apply: boolean;
+  ready: boolean;
+  missing: string[];
+  rows: PushRow[];
+  summary: Record<string, number>;
+  warnings: string[];
 };
 
 export type Integration = {
@@ -81,10 +314,15 @@ export type SemanticIR = {
     legacyLines: string;
     snippet: string;
     trustBoundary?: string;
+    /** "llm" when the LLM worded the statement from the AST evidence; "deterministic" otherwise. */
+    source?: "llm" | "deterministic";
   }[];
   stateMachine: string;
   sideEffects: string[];
   integrations: string[];
+  origin?: "llm" | "deterministic";
+  model?: string | null;
+  generatedAt?: string;
 };
 
 export type ClarificationQuestion = {
@@ -424,6 +662,9 @@ export type ScopeAnalysis = {
     sharedKernels: string[];
     isHighlyCoupled: boolean;
     recommendedBoundary: string;
+    moduleName?: string;
+    evidenceEdgeCount?: number;
+    evidenceKinds?: string[];
   }[];
   businessRules: {
     ruleId: string;
@@ -457,7 +698,14 @@ export type AppliedGraphNode = {
   semanticRole?: string;
   trustBoundary?: string;
   sirRules?: string[];
+  role?: string;
+  file?: string;
+  line?: number;
+  capabilityBasis?: { rule: string; detail?: string; folded?: string; merged?: string };
 };
+
+/** Where an edge came from: every evidence-backed edge has at least one. */
+export type EdgeEvidence = { file: string; line: number; rule_id: string; member?: string };
 
 export type AppliedGraphEdge = {
   id: string;
@@ -467,6 +715,40 @@ export type AppliedGraphEdge = {
   semanticType?: string;
   modernEquivalent?: string;
   migrationRisk?: string;
+  file?: string;
+  line?: number;
+  rule_id?: string;
+  evidence?: EdgeEvidence[];
+  operations?: string[];
+  methods?: string[];
+  actions?: string[];
+  verbs?: string[];
+};
+
+export type CodeWorkflowStep = {
+  from: string;
+  to: string;
+  kind: string;
+  operation?: string;
+  file: string;
+  line: number;
+  depth: number;
+};
+
+export type CodeWorkflow = {
+  id: string;
+  entryPoint: string;
+  entryKind: "http-call" | "controller-action" | "application-start" | string;
+  trigger?: { source: string; verb: string; url: string } | null;
+  steps: CodeWorkflowStep[];
+  reads: string[];
+  writes: string[];
+  externals: string[];
+  events: string[];
+  depth: number;
+  fullyTraced: boolean;
+  file: string;
+  line: number;
 };
 
 export type WorkflowChain = {
@@ -509,9 +791,16 @@ export type AppliedGraph = {
     targetType: string;
     conversionNote: string;
     migrationRisk: string;
+    entityProperty?: string;
+    file?: string;
+    line?: number;
+    rule_id?: string;
   }[];
   workflowChains: WorkflowChain[];
+  codeWorkflows?: CodeWorkflow[];
   sharedKernels: SharedKernel[];
+  engine?: string;
+  diagnostics?: Record<string, unknown[]>;
   statistics: {
     totalNodes: number;
     capabilityNodes: number;
@@ -524,6 +813,9 @@ export type AppliedGraph = {
     totalWorkflowChains: number;
     tracedWorkflowChains: number;
     sharedKernelCount: number;
+    codeWorkflows?: number;
+    fullyTracedCodeWorkflows?: number;
+    edgesWithLocation?: number;
   };
   semanticIndex: {
     nodesByRole: Record<string, string[]>;
@@ -831,6 +1123,59 @@ export const api = {
     ),
   knowledgeGraph: (id: string) =>
     fetch(`/api/engagements/${id}/knowledge-graph`).then((r) => parse<AppliedGraph>(r)),
+  scopeModules: (id: string, refresh = false) =>
+    fetch(`/api/engagements/${id}/scope-modules${refresh ? "?refresh=true" : ""}`).then((r) => parse<ScopeModules>(r)),
+  generateSir: (id: string, force = false) =>
+    fetch(`/api/engagements/${id}/semantic-ir/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force }),
+    }).then((r) => parse<Engagement>(r)),
+  generateUserStories: (id: string, opts: { refine?: boolean; epic?: string; persona?: string } = {}) =>
+    fetch(`/api/engagements/${id}/user-stories/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refine: true, ...opts }),
+    }).then((r) => parse<Engagement>(r)),
+  integrations: () => fetch("/api/integrations").then((r) => parse<{ providers: TrackerProvider[] }>(r)),
+  pushUserStories: (
+    id: string,
+    body: {
+      provider: string;
+      apply?: boolean;
+      confirm?: boolean;
+      only?: string[];
+      allowTemplate?: boolean;
+      config?: Record<string, string>;
+      credentials?: Record<string, string>;
+    },
+  ) =>
+    fetch(`/api/engagements/${id}/user-stories/push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<PushReport>(r)),
+  updateStory: (id: string, storyId: string, changes: StoryEdit) =>
+    fetch(`/api/engagements/${id}/user-stories/stories/${encodeURIComponent(storyId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }).then((r) => parse<Engagement>(r)),
+  removeStory: (id: string, storyId: string) =>
+    fetch(`/api/engagements/${id}/user-stories/stories/${encodeURIComponent(storyId)}`, { method: "DELETE" }).then((r) =>
+      parse<Engagement>(r),
+    ),
+  userStoriesExportUrl: (id: string, format: "json" | "md") => `/api/engagements/${id}/user-stories/export?format=${format}`,
+  testScenarios: (id: string) => fetch(`/api/engagements/${id}/test-scenarios`).then((r) => parse<TestScenariosResponse>(r)),
+  generateTestScenarios: (id: string) =>
+    fetch(`/api/engagements/${id}/test-scenarios/generate`, { method: "POST" }).then((r) => parse<TestScenariosResponse>(r)),
+  runTestScenarios: (id: string, body: { baseUrl?: string; caseIds?: string[] } = {}) =>
+    fetch(`/api/engagements/${id}/test-scenarios/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<TestScenariosResponse>(r)),
+  testScenariosExportUrl: (id: string, format: "zip" | "md") => `/api/engagements/${id}/test-scenarios/export?format=${format}`,
   packUrl: (id: string) => `/api/engagements/${id}/pack`,
 };
 

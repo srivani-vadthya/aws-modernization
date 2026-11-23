@@ -94,12 +94,19 @@ def adopt(engagement: dict, report: dict) -> None:
         for path in module["files"]:
             programs.append({"id": module["id"] + ":" + path, "path": path, "name": posixpath.basename(path),
                              "capability": module["id"], "loc": assets[path]["loc"] or 0, "online": False})
-    seed["capabilities"], seed["programs"], seed["tables"] = caps, programs, []
-    seed["graph"] = copy.deepcopy(report["graph"])
+    if (seed.get("graph") or {}).get("evidenceRequired") and seed.get("dotnet_akg"):
+        # The parsed .NET AKG (symbol-resolved, every edge located) is strictly more precise than the
+        # lexical discovery graph ("not a call graph"); keep it and its capability assignment.
+        seed.pop("applied_graph", None)
+        seed.pop("scope_analysis", None)
+    else:
+        seed["capabilities"], seed["programs"], seed["tables"] = caps, programs, []
+        seed["graph"] = copy.deepcopy(report["graph"])
     # Legacy consumers must not mistake generated demo AST/semantic rules for source evidence.
     seed["semantic_ir"] = []
+    akg_integrations = (seed.get("discovery") or {}).get("integrations", []) if seed.get("dotnet_akg") else []
     seed["discovery"] = {"engine": report["engine"], "objective": "Source-backed discovery",
-        "mode": "Evidence-based", "transformStatus": "not-used", "integrations": [],
+        "mode": "Evidence-based", "transformStatus": "not-used", "integrations": akg_integrations,
         "notes": "See the approved discovery report for evidence and analysis limitations."}
     engagement["sourceDiscovery"] = {"version": report["version"], "sourceDigest": report["sourceDigest"],
         "reportPath": "artifacts/discovery-approved.json", "analysisCoverage": report["analysisCoverage"]}

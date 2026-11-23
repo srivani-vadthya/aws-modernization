@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import ado, aws_intake, bedrock_skills, hitl_orchestrator, ingest, knowledge_graph, pack, playwright_gen, store
+from . import ado, aws_intake, bedrock_skills, hitl_orchestrator, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, scope_modules, sir_generator, store, target_contract, test_scenarios, user_stories
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,14 @@ class GateIn(BaseModel):
 class ScopeIn(BaseModel):
     capabilityId: str
     extraPaths: list[str] = []
+
+
+def _ensure_gates(eng: dict) -> dict:
+    """Engagements saved before a phase existed (e.g. user-stories) get a pending gate for it."""
+    gates = eng.setdefault("gates", {})
+    for pid in PHASE_IDS:
+        gates.setdefault(pid, {"status": "pending", "decision": None, "comment": None, "actor": None, "at": None})
+    return eng
 
 
 @app.get("/api/health")
@@ -110,6 +119,7 @@ def get_engagement(eid: str):
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
+    _ensure_gates(eng)
     seed = eng.setdefault("seed", {})
     if "foundational_readiness" not in seed:
         seed["foundational_readiness"] = bedrock_skills.audit_foundational_readiness(eng)
@@ -119,6 +129,7 @@ def get_engagement(eid: str):
         seed["collation_parity"] = bedrock_skills.simulate_ebcdic_collation_parity()
     if "cdc_status" not in seed:
         seed["cdc_status"] = bedrock_skills.get_bidirectional_cdc_status()
+    seed.setdefault("human_actions", human_actions.detect_human_actions(eng))
     return eng
 
 
@@ -216,39 +227,32 @@ def set_scope(eid: str, body: ScopeIn):
                 if consumer_desc not in entry["consumers"]:
                     entry["consumers"].append(consumer_desc)
 
+    # Shared services come only from graph edges that cross this scope's boundary: nothing is fabricated.
     shared_services = list(shared_services_map.values())
-    if not shared_services and body.capabilityId == "motor" and not eng.get("sourceDiscovery"):
-        # Add realistic sample enterprise shared services if graph has partial edges
-        shared_services = [
-            {
-                "resourceId": "LGACDB01",
-                "kind": "program",
-                "resourceName": "Customer Account DB & Credit Invariant",
-                "consumers": [
-                    "Scope 2: Customer 360 (via LGACUS01 CALLS)",
-                    "Scope 3: Home & Content Policy (via LGAPHBN1 CALLS)",
-                    "Scope 4: Claims Processing Subsystem (via LGACLA01 CALLS)",
-                ],
-                "recommendedStrategy": "Extract as Shared AWS Microservice / Domain Shared Kernel with OpenAPI Facade",
-            },
-            {
-                "resourceId": "CUSTOMER",
-                "kind": "table",
-                "resourceName": "CUSTOMER Master Data (Db2 / VSAM)",
-                "consumers": [
-                    "Scope 2: Customer Onboarding (READS/WRITES)",
-                    "Scope 3: Billing & Payments (READS)",
-                ],
-                "recommendedStrategy": "Dual-Write via AWS DMS CDC to avoid database deadlock during Wave 1",
-            }
-        ]
+    for entry in shared_services:
+        entry["recommendedStrategy"] = (
+            "Keep a single owner for this data and expose it to the other scopes through an API or CDC feed"
+            if entry["kind"] == "table" else
+            "Extract as a shared service behind an anti-corruption layer so the other scopes keep working")
 
+    previous_scope = (eng.get("scope") or {}).get("capabilityId")
+    if previous_scope and previous_scope != body.capabilityId:
+        # SIR and user stories belong to one module: a different scope invalidates them and their sign-offs.
+        _ensure_gates(eng)
+        for pid in ("semantic-ir", "user-stories", "test-scenarios"):
+            eng["gates"][pid].update(status="pending", decision=None, comment=None, actor=None, at=None)
+        eng.pop("userStories", None)
+        eng.pop("testScenarios", None)
+        eng.pop("sirMeta", None)
+    module_card = scope_modules.find_module(eng, body.capabilityId)
     eng["scope"] = {
         "capabilityId": body.capabilityId,
         "name": cap["name"],
         "programs": programs,
         "tables": tables,
         "sharedServices": shared_services,
+        "files": (module_card or {}).get("files", []),
+        "useCases": (module_card or {}).get("useCases", []),
         "extraPaths": body.extraPaths,
         "metrics": {
             "programs": len(programs),
@@ -356,10 +360,24 @@ def stage_aws_intake(eid: str):
 
 
 class TargetIn(BaseModel):
-    language: str
-    framework: str
-    data: str
-    architecture: str
+    language: str | None = None
+    framework: str | None = None
+    data: str | None = None
+    architecture: str | None = None
+    languageVersion: str | None = None
+    frameworkVersion: str | None = None
+    runtime: str | None = None
+    runtimeVersion: str | None = None
+    architectureStyle: str | None = None
+    serviceDecomposition: str | None = None
+    frontendRequirement: str | None = None
+    deploymentCloud: str | None = None
+    deploymentRegion: str | None = None
+    deploymentEnvironment: str | None = None
+    approved: bool = False
+    approvedBy: str | None = None
+    approvedAt: str | None = None
+    targetVersion: str | None = None
 
 
 @app.post("/api/engagements/{eid}/target")
@@ -369,12 +387,92 @@ def set_target_technology(eid: str, body: TargetIn):
         raise HTTPException(404, "Engagement not found")
     if not eng.get("seed"):
         raise HTTPException(400, "Engagement artifacts not initialized")
-    target = eng["seed"].setdefault("target", {})
-    target["language"] = body.language
-    target["framework"] = body.framework
-    target["data"] = body.data
-    target["architecture"] = body.architecture
-    return store.save(eng)
+    payload = body.model_dump(exclude_none=True)
+    try:
+        target = target_contract.validate_target_contract(payload, require_approval=False)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    target["approved"] = bool(body.approved)
+    target["approvedBy"] = body.approvedBy or target.get("approvedBy") or ("user" if body.approved else None)
+    target["approvedAt"] = body.approvedAt or (datetime.now(timezone.utc).isoformat() if body.approved else None)
+    target["approvalStatus"] = "APPROVED" if body.approved else (target.get("approvalStatus") or "DRAFT")
+    target["language"] = target_contract.normalize_target_contract(payload)["language"]
+    target["framework"] = target_contract.normalize_target_contract(payload)["framework"]
+    target["data"] = target_contract.normalize_target_contract(payload)["data"]
+    target["architecture"] = target_contract.normalize_target_contract(payload)["architecture"]
+    eng["seed"]["target"] = target
+    store.save(eng)
+    return {"ok": True, "target": target}
+
+
+class MigrationRunRequest(BaseModel):
+    scopeId: str | None = None
+    note: str | None = None
+    sourceDigest: str | None = None
+
+
+@app.post("/api/engagements/{eid}/migration-runs")
+def create_migration_run(eid: str, body: MigrationRunRequest | None = None):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    seed = eng.get("seed") or {}
+    target = seed.get("target") or {}
+    try:
+        target = target_contract.validate_target_contract(target, require_approval=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    scope = eng.get("scope") or {}
+    if not scope:
+        raise HTTPException(422, "A verified scope is required before a migration run can start.")
+    run = migration_runs.create_migration_run(eid, eng, target=target, scope=scope, note=(body.note if body else None))
+    eng.setdefault("migrationRuns", []).append(run)
+    store.save(eng)
+    return {"ok": True, "run": run}
+
+
+@app.get("/api/engagements/{eid}/migration-runs")
+def list_migration_runs(eid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return {"runs": migration_runs.list_migration_runs(eid)}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}")
+def get_migration_run(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    run = migration_runs.load_migration_run(eid, runId)
+    if not run:
+        raise HTTPException(404, "Migration run not found")
+    return {"ok": True, "run": run}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}/artifacts")
+def list_migration_run_artifacts(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    run = migration_runs.load_migration_run(eid, runId)
+    if not run:
+        raise HTTPException(404, "Migration run not found")
+    root = migration_runs.run_root(eid, runId)
+    files = [str(p.relative_to(root)) for p in sorted(root.rglob("*")) if p.is_file()]
+    return {"ok": True, "files": files, "manifest": run.get("artifacts", {}).get("manifest", [])}
+
+
+@app.get("/api/engagements/{eid}/migration-runs/{runId}/human-actions")
+def get_migration_run_human_actions(eid: str, runId: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    root = migration_runs.run_root(eid, runId)
+    path = root / "human-actions.json"
+    if not path.exists():
+        return {"ok": True, "actions": [], "markdown": "# Human Action Required\n\nNo verified human actions found in checks executed.\n"}
+    return {"ok": True, "actions": json.loads(path.read_text(encoding="utf-8")), "markdown": (root / "HUMAN_ACTION_REQUIRED.md").read_text(encoding="utf-8") }
 
 
 class ClarificationAnswersIn(BaseModel):
@@ -425,8 +523,15 @@ def decide_gate(eid: str, phase: str, body: GateIn):
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
+    _ensure_gates(eng)
     if phase == "scope" and body.decision == "approved" and not eng.get("scope"):
         raise HTTPException(400, "Select a business module before approving scope")
+    if phase == "semantic-ir" and body.decision == "approved" and not user_stories.module_sirs(eng):
+        raise HTTPException(400, "Generate the Semantic IR for the selected scope before approving it")
+    if phase == "user-stories" and body.decision == "approved" and not eng.get("userStories"):
+        raise HTTPException(400, "Generate the user stories before approving this step")
+    if phase == "test-scenarios" and body.decision == "approved" and not eng.get("testScenarios"):
+        raise HTTPException(400, "Generate the test scenarios before approving this step")
     
     # Workflow clustered mapping:
     # 'discovery' clusters both discovery & graph; 'requirements' clusters requirements & backlog.
@@ -442,8 +547,6 @@ def decide_gate(eid: str, phase: str, body: GateIn):
         elif phase == "scope" and eng["gates"].get("discovery", {}).get("decision") == "approved":
             pass
         elif phase == "semantic-ir" and eng["gates"].get("scope", {}).get("decision") == "approved":
-            pass
-        elif phase == "modernize" and eng["gates"].get("requirements", {}).get("decision") == "approved":
             pass
         elif eng["gates"][prev].get("decision") != "approved":
             raise HTTPException(400, f"Approve {prev} first")
@@ -481,18 +584,6 @@ def decide_gate(eid: str, phase: str, body: GateIn):
                 seed["scope_analysis"] = knowledge_graph.identify_scope(seed)
             except Exception:
                 pass
-        elif phase == "scope" and "semantic-ir" in eng["gates"]:
-            eng["gates"]["semantic-ir"]["decision"] = "approved"
-            eng["gates"]["semantic-ir"]["status"] = "approved"
-            eng["gates"]["semantic-ir"]["comment"] = body.comment
-            eng["gates"]["semantic-ir"]["actor"] = body.actor
-            eng["gates"]["semantic-ir"]["at"] = eng["gates"][phase]["at"]
-        elif phase == "requirements" and "backlog" in eng["gates"]:
-            eng["gates"]["backlog"]["decision"] = "approved"
-            eng["gates"]["backlog"]["status"] = "approved"
-            eng["gates"]["backlog"]["comment"] = body.comment
-            eng["gates"]["backlog"]["actor"] = body.actor
-            eng["gates"]["backlog"]["at"] = eng["gates"][phase]["at"]
 
     if body.decision == "approved":
         # Calculate next phase taking into account clustered UI progression
@@ -504,11 +595,7 @@ def decide_gate(eid: str, phase: str, body: GateIn):
         elif phase == "scope":
             nxt = "semantic-ir"
         elif phase == "semantic-ir":
-            nxt = "requirements"
-        elif phase == "requirements":
-            nxt = "modernize"
-        elif phase == "backlog":
-            nxt = "modernize"
+            nxt = "user-stories"
         elif idx + 1 < len(PHASE_IDS):
             nxt = PHASE_IDS[idx + 1]
         else:
@@ -519,17 +606,8 @@ def decide_gate(eid: str, phase: str, body: GateIn):
             eng["gates"][nxt]["status"] = "ready"
             eng["status"] = nxt
 
-            # Dynamic gate-triggered progression with Amazon Bedrock
-            if nxt == "requirements":
-                source_dir = store.engagement_dir(eid) / "source"
-                try:
-                    dynamic_reqs = bedrock_skills.extract_dynamic_requirements(eng, source_dir)
-                    if dynamic_reqs:
-                        eng["seed"]["requirements"] = dynamic_reqs
-                except Exception:
-                    pass
-
-            elif nxt == "tests":
+            # Dynamic gate-triggered progression
+            if nxt == "tests":
                 try:
                     pw_dir = store.engagement_dir(eid) / "artifacts" / "tests" / "playwright"
                     playwright_gen.generate_playwright_suite(pw_dir, eng)
@@ -847,8 +925,12 @@ def post_synthesize_codebase(eid: str):
         raise HTTPException(404, "Engagement not found")
     scope = eng.get("scope") or {}
     target_tech = (eng.get("seed") or {}).get("target", {})
-    files = bedrock_skills.synthesize_target_codebase(scope, target_tech)
-    return {"ok": True, "language": target_tech.get("language", "java"), "files": files}
+    try:
+        target = target_contract.validate_target_contract(target_tech, require_approval=True)
+        files = bedrock_skills.synthesize_target_codebase(scope, target)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "language": target.get("language", "unknown"), "target": target, "files": files}
 
 
 @app.get("/api/engagements/{eid}/terraform/azure")
@@ -863,10 +945,11 @@ def get_azure_terraform(eid: str):
 
 
 class GitHubPublishIn(BaseModel):
-    repoName: str
+    repoName: str | None = None
     token: str | None = None
     org: str | None = None
     private: bool = True
+    referenceNumber: str | None = None
 
 
 @app.post("/api/engagements/{eid}/github-publish")
@@ -878,9 +961,21 @@ def post_github_publish(eid: str, body: GitHubPublishIn):
 
     scope = eng.get("scope") or {}
     target_tech = (eng.get("seed") or {}).get("target", {})
-    
+    try:
+        target = target_contract.validate_target_contract(target_tech, require_approval=True)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    repo_name = body.repoName or os.getenv("FRONTEND_REPO", "").rstrip("/").split("/")[-1].removesuffix(".git") or os.getenv("BACKEND_REPO", "").rstrip("/").split("/")[-1].removesuffix(".git") or "insurance-modernized-backend"
+    reference_number = body.referenceNumber or eng.get("id") or "Userstory"
+    feature_branch = github_deployer.build_feature_branch_name(reference_number)
+
     # 1. Synthesize target service code
-    code_files = bedrock_skills.synthesize_target_codebase(scope, target_tech)
+    code_files = bedrock_skills.synthesize_target_codebase(scope, target)
+    if target.get("language", "").lower() in {"csharp", "c#", "dotnet"}:
+        from .generated_dotnet import write_dotnet_generated, write_frontend_generated
+        write_dotnet_generated()
+        write_frontend_generated()
 
     # 2. Generate Azure WebApps & PostgreSQL Terraform IaC
     tf_files = iac_generator.generate_azure_terraform(eng)
@@ -898,15 +993,18 @@ def post_github_publish(eid: str, body: GitHubPublishIn):
         **workflow_files,
         "specifications/SRS.md": srs_doc,
         "architecture/target-architecture.md": c4_doc,
-        "README.md": f"# {body.repoName}\n\nModernized cloud-native microservice generated by Nexus Modernize for capability: `{scope.get('name', 'Core')}`.\n\n### Deployment Topology\n- **Compute**: Azure Linux Web Apps\n- **Database**: Azure Database for PostgreSQL Flexible Server\n- **IaC**: `terraform/azure/`\n- **CI/CD**: `.github/workflows/modernization-ci-cd.yml`\n",
+        "README.md": f"# {repo_name}\n\nModernized cloud-native microservice generated by Nexus Modernize for capability: `{scope.get('name', 'Core')}`.\n\n### Deployment Topology\n- **Compute**: Azure Linux Web Apps\n- **Database**: Azure Database for PostgreSQL Flexible Server\n- **IaC**: `terraform/azure/`\n- **CI/CD**: `.github/workflows/modernization-ci-cd.yml`\n",
     }
 
     result = github_deployer.create_or_update_repo(
-        repo_name=body.repoName,
+        repo_name=repo_name,
         files=all_files,
         token=body.token,
         org=body.org,
         private=body.private,
+        branch=feature_branch,
+        repo_url=os.getenv("FRONTEND_REPO") or os.getenv("BACKEND_REPO"),
+        reference_number=reference_number,
     )
     if result.get("ok"):
         eng["githubDeployment"] = result
@@ -936,18 +1034,79 @@ def post_batch_modernize(eid: str, body: BatchIn | None = None):
     return res
 
 
+def _rebuild_dotnet_akg(eng: dict) -> dict | None:
+    source = store.engagement_dir(eng["id"]) / "source"
+    try:
+        return ingest.build_dotnet_graph(eng, source)
+    except Exception as exc:  # parser failures must not take the endpoint down
+        logger.exception("dotnet AKG build failed for %s", eng["id"])
+        raise HTTPException(500, f"AKG extraction failed: {exc}") from exc
+
+
 @app.get("/api/engagements/{eid}/knowledge-graph")
 def get_knowledge_graph(eid: str):
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
     seed = eng.get("seed") or {}
+    # Engagements ingested before the parser-based extractor existed: build it once, unless a
+    # scope has already been chosen against the old capability ids.
+    if not seed.get("dotnet_akg") and not seed.get("akgChecked") and not eng.get("scope") \
+            and eng.get("sourceType") != "sample":
+        _rebuild_dotnet_akg(eng)
+        seed = eng.setdefault("seed", {})
+        seed["akgChecked"] = True
     applied = knowledge_graph.build_applied_graph(seed)
     seed["applied_graph"] = applied
     seed["scope_analysis"] = knowledge_graph.identify_scope(seed)
     eng["seed"] = seed
     store.save(eng)
     return applied
+
+
+@app.post("/api/engagements/{eid}/knowledge-graph/rebuild")
+def rebuild_knowledge_graph(eid: str):
+    """Re-run the parser-based extractor over the stored source (e.g. after editing overrides)."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    if _rebuild_dotnet_akg(eng) is None:
+        raise HTTPException(400, "No .sln or .csproj found in the engagement source")
+    seed = eng["seed"]
+    seed["applied_graph"] = knowledge_graph.build_applied_graph(seed)
+    seed["scope_analysis"] = knowledge_graph.identify_scope(seed)
+    store.save(eng)
+    return seed["applied_graph"]
+
+
+class AkgOverridesIn(BaseModel):
+    """Human overrides; saved overrides beat every assignment rule.
+
+    rename: {capability id: display name}
+    assign: {type fqn or simple name: capability id}
+    merge:  {capability id: capability id it folds into}
+    """
+    rename: dict[str, str] = Field(default_factory=dict)
+    assign: dict[str, str] = Field(default_factory=dict)
+    merge: dict[str, str] = Field(default_factory=dict)
+
+
+@app.get("/api/engagements/{eid}/akg-overrides")
+def get_akg_overrides(eid: str):
+    if not store.load(eid):
+        raise HTTPException(404, "Engagement not found")
+    return ingest.akg_overrides(eid, store.engagement_dir(eid) / "source") or {"rename": {}, "assign": {}, "merge": {}}
+
+
+@app.put("/api/engagements/{eid}/akg-overrides")
+def put_akg_overrides(eid: str, body: AkgOverridesIn):
+    import json as _json
+    from .dotnet_akg import OVERRIDES_FILE
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    (store.engagement_dir(eid) / OVERRIDES_FILE).write_text(_json.dumps(body.model_dump(), indent=2), encoding="utf-8")
+    return rebuild_knowledge_graph(eid)
 
 
 @app.get("/api/engagements/{eid}/scope-analysis")
@@ -977,6 +1136,204 @@ def get_saga_orchestrator(eid: str):
     return res
 
 
+# ---------------------------------------------------------------------------
+# Scope modules (AKG + AST), Semantic IR generation, user stories, tracker integration
+# ---------------------------------------------------------------------------
+
+@app.get("/api/engagements/{eid}/scope-modules")
+def get_scope_modules(eid: str, refresh: bool = False, llm: bool = True):
+    """Business modules / use cases / file lists derived from the AKG + AST (LLM only words them)."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    if not eng.get("seed"):
+        raise HTTPException(400, "Engagement has no analysis yet")
+    try:
+        result = scope_modules.build_scope_modules(eng, use_llm=llm, refresh=refresh)
+    except Exception as exc:
+        logger.exception("scope module derivation failed for %s", eid)
+        raise HTTPException(500, f"Scope analysis failed: {exc}") from exc
+    store.save(eng)
+    return result
 
 
+class SirGenerateIn(BaseModel):
+    force: bool = False
+    llm: bool = True
+
+
+@app.post("/api/engagements/{eid}/semantic-ir/generate")
+def generate_semantic_ir(eid: str, body: SirGenerateIn | None = None):
+    """Derive the SIR contracts of the scoped module from AKG/AST artifacts (LLM lifts wording only)."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    if not eng.get("scope"):
+        raise HTTPException(400, "Select a scope before generating the Semantic IR")
+    body = body or SirGenerateIn()
+    try:
+        return sir_generator.generate(eng, use_llm=body.llm, force=body.force)
+    except Exception as exc:
+        logger.exception("SIR generation failed for %s", eid)
+        raise HTTPException(500, f"Semantic IR generation failed: {exc}") from exc
+
+
+@app.get("/api/integrations")
+def get_integrations():
+    """Which trackers are configured through the environment (no secret values are ever returned)."""
+    return {"providers": user_stories.integrations()}
+
+
+class StoriesGenerateIn(BaseModel):
+    refine: bool = True
+    epic: str | None = None
+    persona: str | None = None
+
+
+@app.get("/api/engagements/{eid}/user-stories")
+def get_user_stories(eid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return {"userStories": eng.get("userStories"), "sirCount": len(user_stories.module_sirs(eng))}
+
+
+@app.post("/api/engagements/{eid}/user-stories/generate")
+def generate_user_stories(eid: str, body: StoriesGenerateIn | None = None):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    body = body or StoriesGenerateIn()
+    try:
+        return user_stories.generate(eng, refine=body.refine, epic=body.epic, persona=body.persona)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        logger.exception("user story generation failed for %s", eid)
+        raise HTTPException(500, f"User story generation failed: {exc}") from exc
+
+
+class StoryEditIn(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    acceptanceCriteria: list[str] | None = None
+    labels: list[str] | None = None
+    storyPoints: int | None = None
+
+
+@app.patch("/api/engagements/{eid}/user-stories/stories/{sid}")
+def edit_user_story(eid: str, sid: str, body: StoryEditIn):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return user_stories.update_story(eng, sid, body.model_dump(exclude_none=True))
+    except KeyError as exc:
+        raise HTTPException(404, f"Story {sid} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/engagements/{eid}/user-stories/stories/{sid}")
+def delete_user_story(eid: str, sid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return user_stories.remove_story(eng, sid)
+    except KeyError as exc:
+        raise HTTPException(404, f"Story {sid} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/engagements/{eid}/user-stories/export")
+def export_user_stories(eid: str, format: str = "json"):
+    eng = store.load(eid)
+    if not eng or not eng.get("userStories"):
+        raise HTTPException(404, "No user stories generated yet")
+    backlog = eng["userStories"]["backlog"]
+    if format == "md":
+        return Response(user_stories.bm.backlog_markdown(backlog), media_type="text/markdown",
+                        headers={"Content-Disposition": f'attachment; filename="backlog-{eid}.md"'})
+    return Response(__import__("json").dumps(backlog, indent=2, ensure_ascii=False), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="backlog-{eid}.json"'})
+
+
+class TrackerPushIn(BaseModel):
+    provider: str = Field(pattern="^(jira|ado|bitbucket|github)$")
+    apply: bool = False
+    confirm: bool = False
+    only: list[str] | None = None
+    allowTemplate: bool = False
+    config: dict[str, str] = Field(default_factory=dict)       # non-secret overrides (project key, org, ...)
+    credentials: dict[str, str] = Field(default_factory=dict)  # optional, session-only; never stored
+
+
+class TestRunIn(BaseModel):
+    baseUrl: str | None = Field(default=None, pattern=r"^https?://\S+$")
+    caseIds: list[str] | None = None
+
+
+def _with_stale(eng: dict) -> dict:
+    return {"testScenarios": eng.get("testScenarios"), "stale": test_scenarios.is_stale(eng)}
+
+
+@app.get("/api/engagements/{eid}/test-scenarios")
+def get_test_scenarios(eid: str):
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    return _with_stale(eng)
+
+
+@app.post("/api/engagements/{eid}/test-scenarios/generate")
+def generate_test_scenarios(eid: str):
+    """Scenarios, detailed test cases, Playwright (TypeScript) scripts, test data and coverage, from the user stories."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return _with_stale(test_scenarios.generate(eng))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/engagements/{eid}/test-scenarios/run")
+def run_test_scenarios(eid: str, body: TestRunIn | None = None):
+    """Quality checks on every case, plus a live Playwright run when a base URL is given."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    body = body or TestRunIn()
+    try:
+        test_scenarios.run(eng, body.baseUrl, body.caseIds)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _with_stale(eng)
+
+
+@app.get("/api/engagements/{eid}/test-scenarios/export")
+def export_test_scenarios(eid: str, format: str = "zip"):
+    eng = store.load(eid)
+    if not eng or not eng.get("testScenarios"):
+        raise HTTPException(404, "No test scenarios generated yet")
+    if format == "md":
+        return Response(test_scenarios.export_markdown(eng), media_type="text/markdown",
+                        headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.md"'})
+    return Response(test_scenarios.export_zip(eng), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="test-scenarios-{eid}.zip"'})
+
+
+@app.post("/api/engagements/{eid}/user-stories/push")
+def push_user_stories(eid: str, body: TrackerPushIn):
+    """Optional: push epics/features/stories to Jira / Azure DevOps / Bitbucket / GitHub. Dry run unless apply+confirm."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        return user_stories.push(eng, body.provider, apply=body.apply, confirm=body.confirm, only=body.only,
+                                 allow_template=body.allowTemplate, config=body.config, credentials=body.credentials)
+    except (ValueError, user_stories.pb.PushError) as exc:
+        raise HTTPException(400, str(exc)) from exc
 

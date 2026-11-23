@@ -22,19 +22,36 @@ from collections import defaultdict
 # A node that both CALLS and READS/WRITES is an orchestrator, not a gateway.
 # ---------------------------------------------------------------------------
 
-def _infer_role(outgoing_kinds: set[str]) -> str:
+def _infer_role(outgoing_kinds: set[str], node_type: str = "") -> str:
+    if node_type == "entity":
+        return "data-entity"
+    if node_type == "external":
+        return "external-system"
     if "EMITS_EVENT" in outgoing_kinds:
         return "event-publisher"
     if "TRIGGERED_BY" in outgoing_kinds:
         return "batch-entry-point"
+    if "HTTP_CALLS" in outgoing_kinds or node_type in {"frontend", "view"}:
+        return "screen-boundary"
     if "MAPS_TO" in outgoing_kinds:
         return "screen-boundary"
+    if "INVOKES_EXTERNAL" in outgoing_kinds:
+        return "integration-adapter"
     if "CALLS" in outgoing_kinds:
         # If it also touches data it is still an orchestrator — it delegates
         return "orchestrator"
     if outgoing_kinds & {"READS", "WRITES"}:
         return "data-access-gateway"
     return "business-logic"
+
+
+def _normalized_kinds(edge: dict) -> set[str]:
+    """ACCESSES_DATA carries its read/write operations; expose them as READS/WRITES too."""
+    kind = edge.get("kind", "")
+    if kind == "ACCESSES_DATA":
+        ops = set(edge.get("operations") or ["read"])
+        return {kind} | ({"WRITES"} if "write" in ops else set()) | ({"READS"} if "read" in ops else set())
+    return {kind}
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +76,14 @@ _TRUST_SUFFIXES: list[tuple[str, str]] = [
 
 _TRUST_TYPE_MAP: dict[str, str] = {
     "screen": "UI Boundary — replaced by cloud SPA",
+    "frontend": "UI Boundary — replaced by cloud SPA",
+    "view": "UI Boundary — replaced by cloud SPA",
     "job":    "Batch Boundary — replaced by Step Functions",
-    "event":  "Event Bus — Amazon EventBridge",
+    "event":  "Event Bus — observed publisher",
     "table":  "Deterministic Core — data persistence",
+    "entity": "Deterministic Core — data persistence",
+    "external": "External Integration — outside the solution",
+    "config": "Configuration — externalise to Parameter Store / Secrets Manager",
 }
 
 
@@ -128,6 +150,24 @@ _EDGE_SEMANTIC: dict[str, dict[str, str]] = {
         "modernEquivalent": "Aurora PostgreSQL table owned by bounded context",
         "migrationRisk": "high",
     },
+    "ACCESSES_DATA": {
+        "semanticType": "data-access",
+        "modernEquivalent": "EF Core repository / DbContext owned by the bounded context",
+        "migrationRisk": "medium",
+    },
+    "HTTP_CALLS": {
+        "semanticType": "http-request",
+        "modernEquivalent": "Typed API client against the service's OpenAPI contract",
+        "migrationRisk": "medium",
+    },
+    "INVOKES_EXTERNAL": {
+        "semanticType": "external-integration",
+        "modernEquivalent": "Adapter behind a port (SES, S3, HTTP client via IHttpClientFactory)",
+        "migrationRisk": "high",
+    },
+    "INHERITS": {"semanticType": "type-inheritance", "modernEquivalent": "Composition or base class", "migrationRisk": "low"},
+    "IMPLEMENTS": {"semanticType": "interface-implementation", "modernEquivalent": "Port/adapter interface", "migrationRisk": "low"},
+    "REFERENCES": {"semanticType": "entity-relationship", "modernEquivalent": "Foreign key / aggregate reference by id", "migrationRisk": "medium"},
 }
 
 
@@ -361,6 +401,54 @@ def _trace_use_case_flows(nodes: list[dict], edges: list[dict]) -> list[dict]:
     return flows
 
 
+def _flows_from_code_workflows(code_workflows: list[dict], nodes: list[dict]) -> list[dict]:
+    """Use-case flows from traced code workflows (entry action -> calls -> data/external)."""
+    label = {n["id"]: n.get("label", n["id"]) for n in nodes}
+    flows: list[dict] = []
+    seen: set[tuple] = set()
+    for wf in code_workflows:
+        if wf.get("entryKind") == "controller-action" and any(
+                f["entryPoint"] == wf["entryPoint"] for f in flows):
+            continue
+        tables_read, tables_written = wf.get("reads", []), wf.get("writes", [])
+        all_tables = sorted(set(tables_read) | set(tables_written))
+        if not all_tables:
+            continue
+        key = (wf["entryPoint"], tuple(all_tables))
+        if key in seen:
+            continue
+        seen.add(key)
+        entry_type, _, member = wf["entryPoint"].rpartition(".")
+        trig = wf.get("trigger") or {}
+        entry_label = f"{label.get(entry_type, entry_type)}.{member}"
+        if trig:
+            entry_label = f"{trig.get('verb')} {trig.get('url')} → {entry_label}"
+        chain = []
+        for s in wf.get("steps", []):
+            if s["kind"] == "CALLS":
+                owner = s["to"].rpartition(".")[0]
+                if owner and owner not in chain and owner != entry_type:
+                    chain.append(owner)
+        flows.append({
+            "id": f"UC:{wf['id']}",
+            "entryPoint": wf["entryPoint"],
+            "entryLabel": entry_label,
+            "entryType": wf.get("entryKind", "unknown"),
+            "callChain": chain,
+            "tablesRead": sorted(set(tables_read)),
+            "tablesWritten": sorted(set(tables_written)),
+            "transactionBoundary": all_tables,
+            "externals": wf.get("externals", []),
+            "isMutation": bool(tables_written),
+            "fullyTraced": wf.get("fullyTraced", False),
+            "evidence": {"file": wf.get("file"), "line": wf.get("line")},
+            "candidateUseCaseName": _infer_use_case_name(
+                entry_label, [label.get(t, t) for t in sorted(set(tables_written))],
+                [label.get(t, t) for t in sorted(set(tables_read))]),
+        })
+    return flows
+
+
 def _infer_use_case_name(entry_label: str, written: list[str], read: list[str]) -> str:
     label = entry_label.strip().title()
     if written:
@@ -401,9 +489,11 @@ def _cluster_logical_modules(
     # Group non-hub program/table nodes by capability
     cap_members: dict[str, list[dict]] = defaultdict(list)
     for n in nodes:
-        if n.get("type") in {"program", "table"} and n["id"] not in hub_ids:
+        if n.get("type") in {"program", "table", "entity"} and n["id"] not in hub_ids:
             cap = n.get("capability", "shared")
             cap_members[cap].append(n)
+    write_edges = [e for e in edges if "WRITES" in _normalized_kinds(e)]
+    cap_names = {n.get("capability"): n.get("label") for n in nodes if n.get("type") == "capability"}
 
     # Build intra-capability edge density
     cap_edge_counts: dict[str, int] = defaultdict(int)
@@ -430,7 +520,7 @@ def _cluster_logical_modules(
     modules: list[dict] = []
     for cap_id, members in cap_members.items():
         programs = [m for m in members if m.get("type") == "program"]
-        tables   = [m for m in members if m.get("type") == "table"]
+        tables   = [m for m in members if m.get("type") in {"table", "entity"}]
         intra    = cap_edge_counts.get(cap_id, 0)
         cross    = cap_cross_counts.get(cap_id, 0)
         cohesion = round(intra / max(intra + cross, 1), 2)
@@ -439,22 +529,17 @@ def _cluster_logical_modules(
         # Data ownership: tables exclusively written by this capability
         owned_tables = [
             t["id"] for t in tables
-            if any(
-                node_cap.get(e["source"], "") == cap_id
-                and e["target"] == t["id"]
-                and e["kind"] == "WRITES"
-                for e in edges
-            )
-            and not any(
-                node_cap.get(e["source"], "") != cap_id
-                and e["target"] == t["id"]
-                and e["kind"] == "WRITES"
-                for e in edges
-            )
+            if any(node_cap.get(e["source"], "") == cap_id and e["target"] == t["id"] for e in write_edges)
+            and not any(node_cap.get(e["source"], "") != cap_id and e["target"] == t["id"] for e in write_edges)
         ]
 
+        ids = {m["id"] for m in members}
+        touching = [e for e in edges if e["kind"] != "CONTAINS" and (e["source"] in ids or e["target"] in ids)]
         modules.append({
             "moduleId": cap_id,
+            "moduleName": cap_names.get(cap_id, cap_id),
+            "evidenceEdgeCount": len(touching),
+            "evidenceKinds": sorted({e["kind"] for e in touching}),
             "programs": [p["id"] for p in programs],
             "tables": [t["id"] for t in tables],
             "ownedTables": owned_tables,
@@ -535,7 +620,9 @@ def identify_scope(seed: dict) -> dict:
     shared_kernels: list[dict] = applied.get("sharedKernels", [])
     semantic_ir: list[dict] = seed.get("semantic_ir", [])
 
-    use_case_flows   = _trace_use_case_flows(nodes, edges)
+    code_workflows: list[dict] = applied.get("codeWorkflows") or []
+    use_case_flows   = (_flows_from_code_workflows(code_workflows, nodes) if code_workflows
+                        else _trace_use_case_flows(nodes, edges))
     logical_modules  = _cluster_logical_modules(nodes, edges, shared_kernels)
     business_rules   = _extract_business_rules(semantic_ir, nodes)
 
@@ -576,6 +663,14 @@ def build_applied_graph(seed: dict) -> dict:
     raw_graph: dict = seed.get("graph") or {"nodes": [], "edges": []}
     nodes: list[dict] = [dict(n) for n in raw_graph.get("nodes", [])]
     edges: list[dict] = [dict(e) for e in raw_graph.get("edges", [])]
+    akg_layers: dict = seed.get("dotnet_akg") or {}
+
+    # Evidence-backed graphs: an edge without a source location does not go in the graph.
+    dropped_without_location = 0
+    if raw_graph.get("evidenceRequired"):
+        kept = [e for e in edges if e.get("file") and e.get("line")]
+        dropped_without_location = len(edges) - len(kept)
+        edges = kept
 
     programs: list[dict] = seed.get("programs", [])
     tables: list[dict] = seed.get("tables", [])
@@ -588,7 +683,7 @@ def build_applied_graph(seed: dict) -> dict:
     # Build outgoing-edge index before any mutations
     outgoing_kinds: dict[str, set[str]] = defaultdict(set)
     for edge in edges:
-        outgoing_kinds[edge.get("source", "")].add(edge.get("kind", ""))
+        outgoing_kinds[edge.get("source", "")].update(_normalized_kinds(edge))
 
     # Build SIR rule → node index for annotation
     sir_node_index: dict[str, list[str]] = defaultdict(list)
@@ -602,7 +697,7 @@ def build_applied_graph(seed: dict) -> dict:
     for node in nodes:
         nid = node["id"]
         ntype = node.get("type", "program")
-        node["semanticRole"] = _infer_role(outgoing_kinds.get(nid, set()))
+        node["semanticRole"] = _infer_role(outgoing_kinds.get(nid, set()), ntype)
         node["trustBoundary"] = _infer_trust_boundary(nid, ntype)
         # Attach SIR rules whose astNode references this node id
         node["sirRules"] = [
@@ -612,65 +707,46 @@ def build_applied_graph(seed: dict) -> dict:
             for rule_id in rule_ids
         ]
 
-    # 2. Enrich existing edges with semantic metadata
+    # 2. Enrich existing edges with semantic metadata (never overwrite what the extractor recorded)
     for edge in edges:
-        edge.update(_EDGE_SEMANTIC.get(edge.get("kind", ""), {}))
+        for k, v in _EDGE_SEMANTIC.get(edge.get("kind", ""), {}).items():
+            edge.setdefault(k, v)
 
-    # 3. Synthesise OWNS_DATA edges (capability → table) — track ids live
+    # 3. Synthesise OWNS_DATA edges (capability → table) for legacy graphs only. Evidence-backed
+    #    graphs already carry capability membership as located CONTAINS edges.
     edge_id_set: set[str] = {e["id"] for e in edges}
-
-    for table in tables:
-        cap_id = f"CAP-{table.get('capability', '')}"
-        eid = f"{cap_id}->OWNS:{table['id']}"
-        if eid not in edge_id_set:
-            edges.append({
-                "id": eid,
-                "source": cap_id,
-                "target": table["id"],
-                "kind": "OWNS_DATA",
-                **_EDGE_SEMANTIC["OWNS_DATA"],
-            })
-            edge_id_set.add(eid)
-
-    # 4. Synthesise EMITS_EVENT edges from SIR side-effects
-    event_y_offset = 80
-    for sir in semantic_ir:
-        module_cap = f"CAP-{sir.get('module', '')}"
-        for effect in sir.get("sideEffects", []):
-            if not any(kw in effect.lower() for kw in ("event", "publish", "emit")):
-                continue
-            event_nid = f"EVENT:{sir['id']}"
-            if not any(n["id"] == event_nid for n in nodes):
-                nodes.append({
-                    "id": event_nid,
-                    "label": effect[:60],
-                    "type": "event",
-                    "capability": sir.get("module", "shared"),
-                    "semanticRole": "event-publisher",
-                    "trustBoundary": "Event Bus — Amazon EventBridge",
-                    "sirRules": [],
-                    "position": {"x": 1100, "y": event_y_offset},
-                })
-                event_y_offset += 60
-            eid = f"{module_cap}->EMITS:{event_nid}"
+    if not raw_graph.get("evidenceRequired"):
+        for table in tables:
+            cap_id = f"CAP-{table.get('capability', '')}"
+            eid = f"{cap_id}->OWNS:{table['id']}"
             if eid not in edge_id_set:
                 edges.append({
                     "id": eid,
-                    "source": module_cap,
-                    "target": event_nid,
-                    "kind": "EMITS_EVENT",
-                    **_EDGE_SEMANTIC["EMITS_EVENT"],
+                    "source": cap_id,
+                    "target": table["id"],
+                    "kind": "OWNS_DATA",
+                    **_EDGE_SEMANTIC["OWNS_DATA"],
                 })
                 edge_id_set.add(eid)
 
-    # 5. Data lineage
-    data_lineage = _build_data_lineage(copybook_schemas)
+    # 4. EMITS_EVENT is no longer synthesised from SIR side-effect prose: an event exists only
+    #    when the extractor saw a real publisher call (MediatR/ServiceBus/EventBridge/SNS ...).
 
-    # 6. Workflow trace chains
+    # 5. Data lineage — from the source's own model, never from placeholders
+    if akg_layers:
+        data_lineage = [dict(r) for r in akg_layers.get("dataLineage", [])]
+    else:
+        data_lineage = _build_data_lineage(copybook_schemas)
+
+    # 6. Workflow trace chains (SIR -> requirement -> backlog -> test) and code workflows
     workflow_chains = _build_workflow_chains(semantic_ir, requirements, backlog, tests)
+    code_workflows: list[dict] = akg_layers.get("codeWorkflows", [])
 
     # 7. Shared kernel detection (bidirectional)
-    shared_kernels = _detect_shared_kernels(edges, programs, tables)
+    if akg_layers:
+        shared_kernels = [dict(k) for k in akg_layers.get("sharedKernels", [])]
+    else:
+        shared_kernels = _detect_shared_kernels(edges, programs, tables)
 
     # 8. Statistics
     kind_counts: dict[str, int] = defaultdict(int)
@@ -685,19 +761,27 @@ def build_applied_graph(seed: dict) -> dict:
         "edges": edges,
         "dataLineage": data_lineage,
         "workflowChains": workflow_chains,
+        "codeWorkflows": code_workflows,
         "sharedKernels": shared_kernels,
+        "diagnostics": akg_layers.get("diagnostics", {}),
+        "engine": akg_layers.get("engine") or raw_graph.get("engine") or "inventory",
         "statistics": {
             "totalNodes": len(nodes),
             "capabilityNodes": sum(1 for n in nodes if n.get("type") == "capability"),
             "programNodes": sum(1 for n in nodes if n.get("type") == "program"),
-            "tableNodes": sum(1 for n in nodes if n.get("type") == "table"),
+            "tableNodes": sum(1 for n in nodes if n.get("type") in {"table", "entity"}),
             "eventNodes": sum(1 for n in nodes if n.get("type") == "event"),
+            "externalNodes": sum(1 for n in nodes if n.get("type") == "external"),
             "totalEdges": len(edges),
             "edgesByKind": dict(kind_counts),
             "dataLineageFields": len(data_lineage),
             "totalWorkflowChains": total_chains,
             "tracedWorkflowChains": traced_chains,
+            "codeWorkflows": len(code_workflows),
+            "fullyTracedCodeWorkflows": sum(1 for w in code_workflows if w.get("fullyTraced")),
             "sharedKernelCount": len(shared_kernels),
+            "edgesWithLocation": sum(1 for e in edges if e.get("file") and e.get("line")),
+            "edgesDroppedWithoutLocation": dropped_without_location,
         },
         "semanticIndex": {
             "nodesByRole": _group_by(nodes, "semanticRole"),

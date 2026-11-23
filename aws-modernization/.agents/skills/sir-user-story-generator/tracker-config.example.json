@@ -1,0 +1,35 @@
+{
+  "_comment": "Non-secret tracker settings. Any value left empty falls back to the environment variable named in docs below. Tokens/PATs are NEVER stored here: set them as environment variables (JIRA_API_TOKEN, ADO_PAT, BITBUCKET_APP_PASSWORD or BITBUCKET_TOKEN, GITHUB_TOKEN) or in a git-ignored .env passed with --env-file.",
+  "jira": {
+    "baseUrl": "https://your-org.atlassian.net",
+    "projectKey": "MOD",
+    "email": "you@your-org.com",
+    "epicIssueType": "Epic",
+    "storyIssueType": "Story",
+    "featureMode": "label",
+    "topIssueType": "",
+    "storyPointsField": "customfield_10016"
+  },
+  "ado": {
+    "organization": "your-org",
+    "project": "Your Project",
+    "process": "agile",
+    "baseUrl": "https://dev.azure.com",
+    "areaPath": "",
+    "iterationPath": ""
+  },
+  "bitbucket": {
+    "workspace": "your-workspace",
+    "repository": "your-repo",
+    "username": "your-username"
+  },
+  "github": {
+    "repository": "owner/repo"
+  },
+  "_env": {
+    "jira": ["JIRA_BASE_URL", "JIRA_PROJECT_KEY", "JIRA_EMAIL", "JIRA_API_TOKEN"],
+    "ado": ["ADO_ORG", "ADO_PROJECT", "ADO_PAT"],
+    "bitbucket": ["BITBUCKET_WORKSPACE", "BITBUCKET_REPO", "BITBUCKET_USERNAME", "BITBUCKET_APP_PASSWORD | BITBUCKET_TOKEN"],
+    "github": ["GITHUB_REPO", "GITHUB_TOKEN"]
+  }
+}
