@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+from pathlib import PurePosixPath
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -14,6 +16,7 @@ BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
 
 
 from .llm_gateway import gateway, TaskType
+from .llm_json import ask_json
 
 # Backward-compatible invocation delegating to Unified Agnostic LLM Gateway
 def invoke_bedrock(
@@ -563,6 +566,71 @@ def synthesize_target_codebase(scope: dict, target_tech: dict) -> dict[str, str]
         }
 
     raise ValueError(f"Unsupported target contract: language={lang}, framework={framework}, runtime={runtime}")
+
+
+def synthesize_module_codebase(
+    module: dict,
+    target_tech: dict,
+    parent_files: dict[str, str],
+) -> dict[str, str]:
+    """Generate only one module, using the parent branch's code as implementation context."""
+    module_id = str(module.get("id") or "").strip()
+    if not module_id:
+        raise ValueError("A module id is required for module code generation.")
+    target = dict(target_tech or {})
+    if not target:
+        raise ValueError("A validated user-approved target contract is required before generation can start.")
+    if not parent_files:
+        raise ValueError("The parent branch has no readable source files to use as generation context.")
+
+    slug = re.sub(r"[^a-z0-9-]+", "-", module_id.lower()).strip("-")
+    if not slug:
+        raise ValueError("The module id cannot be converted to a safe module path.")
+    module_root = f"modules/{slug}/"
+
+    context = {path: content for path, content in sorted(parent_files.items()) if isinstance(content, str)}
+    context_size = sum(len(path) + len(content) for path, content in context.items())
+    if context_size > 150_000:
+        raise ValueError("Parent branch code is too large to provide safely as module-generation context.")
+
+    system = (
+        "You are a senior software engineer implementing one business module in an existing modernized "
+        "application. Use the supplied parent-branch source, shared functionality, and dependency manifests "
+        "as authoritative context. Implement only the requested module, reuse existing shared code and "
+        "dependencies where appropriate, and do not rewrite or repeat existing modules. Return JSON only in "
+        'the form {"files": {"modules/<module-id>/<relative-path>": "<complete file contents>"}}. '
+        f"Every returned path must be under {module_root}. Return only files needed for this module."
+    )
+    prompt = json.dumps(
+        {
+            "target": target,
+            "module": module,
+            "parentBranchFiles": context,
+        },
+        ensure_ascii=True,
+    )
+    parsed, _model = ask_json(system, prompt, max_tokens=12000, task_type="code")
+    generated = parsed.get("files") if isinstance(parsed, dict) else None
+    if not isinstance(generated, dict) or not generated:
+        raise RuntimeError("Module code generation did not return a non-empty files object.")
+
+    files: dict[str, str] = {}
+    for raw_path, content in generated.items():
+        if not isinstance(raw_path, str) or not isinstance(content, str):
+            raise RuntimeError("Module code generation returned a file path or content with an invalid type.")
+        path = raw_path.replace("\\", "/")
+        parsed_path = PurePosixPath(path)
+        if (
+            parsed_path.is_absolute()
+            or ".." in parsed_path.parts
+            or not path.startswith(module_root)
+            or path.endswith("/")
+        ):
+            raise RuntimeError(f"Module code generation returned a path outside '{module_root}'.")
+        files[path] = content
+    if not files:
+        raise RuntimeError("Module code generation did not return any valid files.")
+    return files
 
 
 def modernize_batch_job(jcl_text: str) -> dict:

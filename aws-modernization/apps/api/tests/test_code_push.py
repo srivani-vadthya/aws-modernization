@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import pytest
+import base64
 
-from app import code_push
+import pytest
+from fastapi.testclient import TestClient
+
+from app import code_push, main
 
 ENG = {"scope": {"name": "Claims Processing"}}
 
@@ -66,6 +69,227 @@ def test_dummy_code_only_contains_code_files():
     files = code_push.dummy_files(ENG)
     assert "Program.cs" in files and any(p.endswith("Controller.cs") for p in files)
     assert not any(p.endswith((".ts", ".py")) for p in files)
+
+
+def test_code_push_files_endpoint_returns_existing_project_listing(monkeypatch):
+    monkeypatch.setattr(main.store, "load", lambda _eid: ENG)
+
+    response = TestClient(main.app).get("/api/engagements/demo/code-push/files")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["demo"] is True
+    assert data["project"] == "ClaimsProcessing"
+    assert data["module1Branches"] == {}
+    assert {item["path"] for item in data["files"]} == set(code_push.dummy_files(ENG))
+    assert all({"path", "language", "content"} <= item.keys() for item in data["files"])
+
+
+def test_module2_endpoint_uses_existing_code_push_module(monkeypatch):
+    monkeypatch.setattr(main.store, "load", lambda _eid: ENG)
+    calls = []
+
+    def fake_push_module2(**kwargs):
+        calls.append(kwargs)
+        return {"created": False, "parentBranch": kwargs["parent_branch"]}
+
+    monkeypatch.setattr(code_push, "push_module2", fake_push_module2)
+    response = TestClient(main.app).post(
+        "/api/engagements/demo/code-push/module2",
+        json={
+            "repo": "owner/repo",
+            "parentBranch": "modernization/module-1",
+            "newBranch": "modernization/module-2",
+            "token": "request-token",
+            "apply": True,
+            "confirm": False,
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["parent_branch"] == "modernization/module-1"
+    assert calls[0]["new_branch"] == "modernization/module-2"
+    assert calls[0]["apply"] is False
+
+
+def test_code_push_records_latest_successful_module1_branch(monkeypatch):
+    engagement = {"id": "demo"}
+    monkeypatch.setattr(main.store, "load", lambda _eid: engagement)
+    monkeypatch.setattr(main.store, "save", lambda value: value)
+    monkeypatch.setattr(
+        code_push,
+        "push",
+        lambda *_args, **_kwargs: {
+            "repo": "owner/repo",
+            "branch": "modernization/module-1",
+            "baseBranch": "main",
+            "commitSha": "module-1-sha",
+        },
+    )
+
+    response = TestClient(main.app).post(
+        "/api/engagements/demo/code-push",
+        json={
+            "repo": "owner/repo",
+            "branch": "modernization/module-1",
+            "apply": True,
+            "confirm": True,
+        },
+    )
+
+    assert response.status_code == 200
+    saved = engagement["codePushModule1Branches"]["owner/repo"]
+    assert saved["branch"] == "modernization/module-1"
+    assert saved["commitSha"] == "module-1-sha"
+    assert saved["baseBranch"] == "main"
+    assert saved["updatedAt"]
+
+
+def test_module2_endpoint_uses_latest_saved_module1_branch(monkeypatch):
+    engagement = {
+        "id": "demo",
+        "codePushModule1Branches": {
+            "owner/repo": {
+                "branch": "modernization/module-1-latest",
+                "commitSha": "module-1-sha",
+            }
+        },
+    }
+    monkeypatch.setattr(main.store, "load", lambda _eid: engagement)
+    calls = []
+
+    def fake_push_module2(**kwargs):
+        calls.append(kwargs)
+        return {"created": False, "parentBranch": kwargs["parent_branch"]}
+
+    monkeypatch.setattr(code_push, "push_module2", fake_push_module2)
+    response = TestClient(main.app).post(
+        "/api/engagements/demo/code-push/module2",
+        json={
+            "repo": "owner/repo",
+            "newBranch": "modernization/module-2",
+            "token": "request-token",
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0]["parent_branch"] == "modernization/module-1-latest"
+
+
+def test_module2_publishes_new_branch_from_module1_and_preserves_parent_tree(monkeypatch):
+    module1_paths = {
+        "InsuranceProvider.Api.csproj",
+        "Program.cs",
+        "Models/InsuranceProvider.cs",
+        "Services/IInsuranceProviderService.cs",
+        "Services/InsuranceProviderService.cs",
+        "Controllers/InsuranceProviderController.cs",
+        "README.md",
+    }
+    blob_shas = {path: f"blob-{index}" for index, path in enumerate(sorted(module1_paths))}
+    recorded = []
+
+    def fake_call(method, path, token, body=None):
+        recorded.append((method, path, body))
+        if path == "/repos/owner/repo":
+            return 200, {"default_branch": "main", "permissions": {"push": True}}
+        if path.endswith("/git/ref/heads/modernization/module-2"):
+            return 404, {}
+        if path.endswith("/git/ref/heads/modernization/module-1"):
+            return 200, {"object": {"sha": "module-1-commit"}}
+        if path.endswith("/git/commits/module-1-commit"):
+            return 200, {"tree": {"sha": "module-1-tree"}}
+        if path.endswith("/git/trees/module-1-tree?recursive=1"):
+            return 200, {
+                "truncated": False,
+                "tree": [
+                    {"path": item_path, "type": "blob", "sha": blob_sha}
+                    for item_path, blob_sha in blob_shas.items()
+                ],
+            }
+        if "/git/blobs/" in path and method == "GET":
+            file_path = next(file_path for file_path, sha in blob_shas.items() if path.endswith(sha))
+            return 200, {
+                "encoding": "base64",
+                "content": base64.b64encode(f"// {file_path}".encode()).decode(),
+            }
+        if path.endswith("/git/blobs") and method == "POST":
+            return 201, {"sha": "module2-blob"}
+        if path.endswith("/git/trees") and method == "POST":
+            return 201, {"sha": "module2-tree"}
+        if path.endswith("/git/commits") and method == "POST":
+            return 201, {"sha": "module2-commit"}
+        if path.endswith("/git/refs") and method == "POST":
+            return 201, {"ref": body["ref"]}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(code_push, "_call", fake_call)
+    monkeypatch.setattr(
+        code_push,
+        "generate_module2_files",
+        lambda context: {"InsuranceClaims.Api/Program.cs": f"// based on {len(context)} Module 1 files"},
+    )
+
+    dry_run = code_push.push_module2(
+        repo="owner/repo",
+        parent_branch="modernization/module-1",
+        new_branch="modernization/module-2",
+        token="request-token",
+        apply=False,
+    )
+    assert dry_run["previewFiles"] == [
+        {
+            "path": "InsuranceClaims.Api/Program.cs",
+            "language": "csharp",
+            "content": f"// based on {len(module1_paths) - 1} Module 1 files",
+        }
+    ]
+    recorded.clear()
+
+    result = code_push.push_module2(
+        repo="owner/repo",
+        parent_branch="modernization/module-1",
+        new_branch="modernization/module-2",
+        token="request-token",
+        apply=True,
+    )
+
+    assert result["created"] is True
+    assert result["parentCommitSha"] == "module-1-commit"
+    assert result["inheritedFileCount"] == len(module1_paths)
+    tree_call = next(call for call in recorded if call[0] == "POST" and call[1].endswith("/git/trees"))
+    assert tree_call[2]["base_tree"] == "module-1-tree"
+    commit_call = next(call for call in recorded if call[0] == "POST" and call[1].endswith("/git/commits"))
+    assert commit_call[2]["parents"] == ["module-1-commit"]
+    ref_call = next(call for call in recorded if call[0] == "POST" and call[1].endswith("/git/refs"))
+    assert ref_call[2]["ref"] == "refs/heads/modernization/module-2"
+    assert not any(
+        method in {"PATCH", "PUT", "DELETE"} or path.endswith("/git/refs/main")
+        for method, path, _body in recorded
+    )
+
+
+def test_module2_refuses_to_target_repository_default_branch(monkeypatch):
+    calls = []
+
+    def fake_call(method, path, _token, body=None):
+        calls.append((method, path, body))
+        if path == "/repos/owner/repo":
+            return 200, {"default_branch": "main", "permissions": {"push": True}}
+        raise AssertionError(f"Unexpected GitHub request: {method} {path}")
+
+    monkeypatch.setattr(code_push, "_call", fake_call)
+
+    with pytest.raises(code_push.PushError, match="default branch"):
+        code_push.push_module2(
+            repo="owner/repo",
+            parent_branch="modernization/module-1",
+            new_branch="main",
+            token="request-token",
+            apply=True,
+        )
+
+    assert calls == [("GET", "/repos/owner/repo", None)]
 
 
 def test_dry_run_writes_nothing_and_shows_plan(monkeypatch):

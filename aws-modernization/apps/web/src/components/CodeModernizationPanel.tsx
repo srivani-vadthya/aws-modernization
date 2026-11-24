@@ -4,27 +4,39 @@ import {api, type Engagement} from '../api';
 
 type CodeFile = {path: string; language: string; content: string};
 type PushResult = Awaited<ReturnType<typeof api.codePush>>;
+type Module2PushResult = Awaited<ReturnType<typeof api.codePushModule2>>;
+type PushOperation =
+    | {module: 'module1'; result: PushResult}
+    | {module: 'module2'; result: Module2PushResult};
 
 const inputCls =
     'mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-normal focus:border-blue-500 focus:bg-white focus:outline-none';
 
 export function CodeModernizationPanel({e}: {e: Engagement}) {
     const [project, setProject] = useState('');
-    const [files, setFiles] = useState<CodeFile[]>([]);
+    const [module1Files, setModule1Files] = useState<CodeFile[]>([]);
+    const [module2Files, setModule2Files] = useState<CodeFile[]>([]);
+    const [selectedModule, setSelectedModule] = useState<'module1' | 'module2'>('module1');
     const [selected, setSelected] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [module1Branches, setModule1Branches] = useState<
+        Record<string, {branch: string; commitSha: string; baseBranch?: string}>
+    >({});
 
     const [repo, setRepo] = useState('');
     const [token, setToken] = useState('');
-    const [branch, setBranch] = useState('modernized-code');
+    const [module1TargetBranch, setModule1TargetBranch] = useState('modernized-code');
+    const [module2TargetBranch, setModule2TargetBranch] = useState(
+        () => `modernization/module-2-${Date.now()}`,
+    );
     const [base, setBase] = useState('');
     const [overwrite, setOverwrite] = useState(false);
     const [message, setMessage] = useState('Add modernized code');
     const [confirm, setConfirm] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [preview, setPreview] = useState<PushResult | null>(null);
-    const [pushed, setPushed] = useState<PushResult | null>(null);
+    const [preview, setPreview] = useState<PushOperation | null>(null);
+    const [pushed, setPushed] = useState<PushOperation | null>(null);
     const [copied, setCopied] = useState(false);
 
     useEffect(() => {
@@ -34,7 +46,8 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
             .then((r) => {
                 if (!live) return;
                 setProject(r.project);
-                setFiles(r.files);
+                setModule1Files(r.files);
+                setModule1Branches(r.module1Branches ?? {});
                 setSelected(r.files[0]?.path ?? null);
             })
             .catch((err) => live && setLoadError(String(err.message ?? err)));
@@ -43,38 +56,96 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
         };
     }, [e.id]);
 
+    const branch = selectedModule === 'module1' ? module1TargetBranch : module2TargetBranch;
+    const setBranch = selectedModule === 'module1' ? setModule1TargetBranch : setModule2TargetBranch;
+    const module1ParentBranch = module1Branches[repo.trim()]?.branch ?? '';
+    const files = selectedModule === 'module1' ? module1Files : module2Files;
+    const displayProject = selectedModule === 'module1' ? project : 'InsuranceClaims';
+    const previewResult = preview?.result;
+    const previewBranch = preview?.module === 'module1'
+        ? preview.result.branch
+        : preview?.module === 'module2'
+          ? preview.result.newBranch
+          : '';
+    const previewBase = preview?.module === 'module1'
+        ? preview.result.baseBranch
+        : preview?.module === 'module2'
+          ? preview.result.parentBranch
+          : '';
+
     // A preview is only valid for the values it was made with.
     useEffect(() => {
         setPreview(null);
         setConfirm(false);
-    }, [repo, branch, base, overwrite, token, message]);
+        if (selectedModule === 'module2') setModule2Files([]);
+    }, [repo, branch, base, overwrite, token, message, selectedModule]);
 
     const current = files.find((f) => f.path === selected);
     const folders = groupByFolder(files);
     const ready = repo.trim().length > 0 && token.trim().length > 0;
+    const canPush = ready && (selectedModule === 'module1' || !!module1ParentBranch);
+
+    useEffect(() => {
+        setSelected(files[0]?.path ?? null);
+    }, [files]);
 
     async function run(apply: boolean) {
         setBusy(true);
         setError(null);
         if (apply) setPushed(null);
         try {
-            const res = await api.codePush(e.id, {
-                repo: repo.trim(),
-                token: token.trim(),
-                branch: branch.trim(),
-                base: base.trim(),
-                overwrite,
-                message: message.trim(),
-                apply,
-                confirm: apply && confirm,
-            });
-            if (apply) {
-                setPushed(res);
-                setPreview(null);
-                setConfirm(false);
+            if (selectedModule === 'module1') {
+                const res = await api.codePush(e.id, {
+                    repo: repo.trim(),
+                    token: token.trim(),
+                    branch: branch.trim(),
+                    base: base.trim(),
+                    overwrite,
+                    message: message.trim(),
+                    apply,
+                    confirm: apply && confirm,
+                });
+                if (apply) {
+                    setPushed({module: 'module1', result: res});
+                    const commitSha = res.commitSha;
+                    if (commitSha) {
+                        setModule1Branches((existing) => ({
+                            ...existing,
+                            [res.repo]: {
+                                branch: res.branch,
+                                commitSha,
+                                baseBranch: res.baseBranch,
+                            },
+                        }));
+                    }
+                    setPreview(null);
+                    setConfirm(false);
+                } else {
+                    setPreview({module: 'module1', result: res});
+                    setPushed(null);
+                }
             } else {
-                setPreview(res);
-                setPushed(null);
+                if (!module1ParentBranch) {
+                    throw new Error('Push Module 1 successfully first to establish the parent branch for Module 2.');
+                }
+                const res: Module2PushResult = await api.codePushModule2(e.id, {
+                    repo: repo.trim(),
+                    token: token.trim(),
+                    newBranch: branch.trim(),
+                    message: message.trim(),
+                    apply,
+                    confirm: apply && confirm,
+                });
+                if (apply) {
+                    setPushed({module: 'module2', result: res});
+                    setPreview(null);
+                    setConfirm(false);
+                } else {
+                    const generated = res.previewFiles ?? [];
+                    setModule2Files(generated);
+                    setPreview({module: 'module2', result: res});
+                    setPushed(null);
+                }
             }
         } catch (err) {
             setError(String((err as Error).message ?? err));
@@ -88,11 +159,26 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
             <section className='rounded-xl border border-slate-200 bg-white p-5 shadow-xs'>
                 <div className='flex flex-wrap items-center justify-between gap-2'>
                     <h3 className='text-xs font-bold uppercase tracking-wider text-slate-500'>
-                        Modernized code{project ? ` · ${project}.Api` : ''}
+                        Generated code · {displayProject}.Api
                     </h3>
-                    <span className='rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800'>
-                        Demo project · {files.length} files
-                    </span>
+                    <div className='flex items-center gap-2'>
+                        <label className='text-[10px] font-semibold text-slate-500' htmlFor='code-push-module'>
+                            Module
+                        </label>
+                        <select
+                            id='code-push-module'
+                            value={selectedModule}
+                            disabled={busy}
+                            onChange={(ev) => setSelectedModule(ev.target.value === 'module2' ? 'module2' : 'module1')}
+                            className='rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700'
+                        >
+                            <option value='module1'>Module 1 · {project || 'Modernized API'}</option>
+                            <option value='module2'>Module 2 · InsuranceClaims</option>
+                        </select>
+                        <span className='rounded bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800'>
+                            {files.length} files
+                        </span>
+                    </div>
                 </div>
                 {loadError && (
                     <p
@@ -159,7 +245,11 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                             )}
                         </div>
                         <pre className='max-h-96 overflow-auto p-3 text-[11px] leading-relaxed text-slate-800'>
-                            {current?.content}
+                            {current?.content ?? (
+                                selectedModule === 'module2'
+                                    ? 'Preview Module 2 to generate code using the latest successful Module 1 branch.'
+                                    : ''
+                            )}
                         </pre>
                     </div>
                 </div>
@@ -181,13 +271,23 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                             />
                         </label>
                         <label className='block text-[11px] font-semibold text-slate-600'>
-                            Base branch (optional)
+                            {selectedModule === 'module1' ? 'Base branch (optional)' : 'Latest Module 1 parent branch'}
                             <input
-                                value={base}
-                                placeholder="Leave empty to use the repo's default branch"
+                                value={selectedModule === 'module1' ? base : module1ParentBranch}
+                                placeholder={
+                                    selectedModule === 'module1'
+                                        ? "Leave empty to use the repo's default branch"
+                                        : 'Push Module 1 successfully first'
+                                }
+                                readOnly={selectedModule === 'module2'}
                                 onChange={(ev) => setBase(ev.target.value)}
                                 className={inputCls}
                             />
+                            {selectedModule === 'module2' && !module1ParentBranch && (
+                                <span className='mt-1 block font-normal text-amber-700'>
+                                    No successful Module 1 branch is recorded for this repository.
+                                </span>
+                            )}
                         </label>
                         <label className='block text-[11px] font-semibold text-slate-600'>
                             <span className='font-mono'>GitHub token (PAT)</span>
@@ -227,26 +327,28 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                             What will be pushed
                         </h4>
                         <p className='text-xs text-slate-600'>
-                            {files.length} code files as one commit on a new
-                            branch, built on top of the base branch. Existing
-                            branches are never overwritten.
+                            {files.length} {selectedModule === 'module1' ? 'Module 1' : 'Module 2'} files will be committed to a new branch
+                            {selectedModule === 'module1'
+                                ? ' from the configured base branch.'
+                                : ' from the latest successful Module 1 branch.'}
+                            {' '}Existing branches are never overwritten.
                         </p>
-                        <label className='flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900'>
-                            <input
-                                type='checkbox'
-                                checked={overwrite}
-                                onChange={(ev) => setOverwrite(ev.target.checked)}
-                                className='mt-0.5'
-                            />
-                            <span>
-                                Replace existing files. Off by default: files
-                                that already exist on the base branch are kept
-                                and skipped.
-                            </span>
-                        </label>
+                        {selectedModule === 'module1' && (
+                            <label className='flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900'>
+                                <input
+                                    type='checkbox'
+                                    checked={overwrite}
+                                    onChange={(ev) => setOverwrite(ev.target.checked)}
+                                    className='mt-0.5'
+                                />
+                                <span>
+                                    Replace existing files. Off by default: files that already exist on the base branch are kept and skipped.
+                                </span>
+                            </label>
+                        )}
                         <button
                             type='button'
-                            disabled={busy || !ready}
+                            disabled={busy || !canPush}
                             onClick={() => void run(false)}
                             className='rounded-lg border border-blue-300 bg-white px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50'
                         >
@@ -265,15 +367,14 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                                     />
                                     <span>
                                         I understand this creates branch{' '}
-                                        <strong>{preview.branch}</strong> in{' '}
-                                        <strong>{preview.repo}</strong> from{' '}
-                                        <strong>{preview.baseBranch}</strong>{' '}
-                                        with {preview.fileCount} files.
+                                        <strong>{previewBranch}</strong> in{' '}
+                                        <strong>{previewResult?.repo}</strong> from{' '}
+                                        <strong>{previewBase}</strong> with {previewResult?.fileCount} files.
                                     </span>
                                 </label>
                                 <button
                                     type='button'
-                                    disabled={busy || !confirm || preview.fileCount === 0}
+                                    disabled={busy || !confirm || previewResult?.fileCount === 0}
                                     onClick={() => void run(true)}
                                     className='rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-40'
                                 >
@@ -292,70 +393,56 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                         {error}
                     </p>
                 )}
-                {preview && (
+                {preview && previewResult && (
                     <div className='mt-3 rounded-lg border border-slate-200'>
                         <div className='border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-800'>
-                            Dry run for {preview.repo}
+                            Dry run for {previewResult.repo}
                             <span className='ml-2 font-mono font-normal text-slate-500'>
-                                {preview.branch}
+                                {previewBranch}
                             </span>
                         </div>
                         <p className='border-b border-slate-100 px-4 py-1.5 text-[11px] text-slate-600'>
-                            Base: <strong>{preview.baseBranch}</strong> ·{' '}
-                            {preview.counts?.new ?? 0} new ·{' '}
-                            {preview.counts?.replace ?? 0} replace ·{' '}
-                            {preview.counts?.skip ?? 0} kept (already exist)
+                            {preview.module === 'module1' ? 'Base' : 'Module 1 parent'}:{' '}
+                            <strong>{previewBase}</strong> · {previewResult.fileCount} files
+                            {preview.module === 'module1'
+                                ? ` · ${preview.result.counts?.new ?? 0} new · ${preview.result.counts?.replace ?? 0} replace · ${preview.result.counts?.skip ?? 0} kept`
+                                : ` · ${preview.result.inheritedFileCount} inherited`}
                         </p>
-                        {preview.fileCount === 0 && (
+                        {previewResult.fileCount === 0 && (
                             <p className='border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] text-amber-800'>
-                                Nothing to push: every file already exists on
-                                the base branch. Tick &quot;Replace existing
-                                files&quot; to overwrite them.
+                                No new files are available to push.
                             </p>
                         )}
                         <ul className='max-h-48 divide-y divide-slate-100 overflow-auto font-mono text-[11px] text-slate-700'>
-                            {(preview.plan ?? []).map((f) => (
-                                <li
-                                    key={f.path}
-                                    className='flex items-center justify-between gap-2 px-4 py-1'
-                                >
-                                    <span className='truncate'>{f.path}</span>
-                                    <span
-                                        className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                                            f.action === 'new'
-                                                ? 'bg-emerald-50 text-emerald-700'
-                                                : f.action === 'replace'
-                                                  ? 'bg-amber-50 text-amber-800'
-                                                  : 'bg-slate-100 text-slate-500'
-                                        }`}
-                                    >
-                                        {f.action === 'new'
-                                            ? 'New'
-                                            : f.action === 'replace'
-                                              ? 'Will replace'
-                                              : 'Kept (exists)'}
-                                    </span>
-                                </li>
-                            ))}
+                            {preview.module === 'module1'
+                                ? (preview.result.plan ?? []).map((item) => (
+                                    <li key={item.path} className='flex items-center justify-between gap-2 px-4 py-1'>
+                                        <span className='truncate'>{item.path}</span>
+                                        <span className='text-slate-500'>{item.action}</span>
+                                    </li>
+                                ))
+                                : (preview.result.generatedFiles ?? []).map((path) => (
+                                    <li key={path} className='px-4 py-1'>{path}</li>
+                                ))}
                         </ul>
                     </div>
                 )}
-                {pushed && (
+                {pushed?.module === 'module1' && (
                     <div className='mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900'>
                         <div className='font-bold'>
-                            Pushed {pushed.fileCount} files to {pushed.repo} on
-                            branch {pushed.branch} (from {pushed.baseBranch}).
+                            Pushed {pushed.result.fileCount} files to {pushed.result.repo} on
+                            branch {pushed.result.branch} (from {pushed.result.baseBranch}).
                         </div>
-                        {pushed.initialisedEmptyRepo && (
+                        {pushed.result.initialisedEmptyRepo && (
                             <p className='mt-1 text-[11px]'>
                                 The repository was empty, so a README was
                                 added first to start its default branch.
                             </p>
                         )}
                         <div className='mt-2 flex flex-wrap gap-3'>
-                            {pushed.branchUrl && (
+                            {pushed.result.branchUrl && (
                                 <a
-                                    href={pushed.branchUrl}
+                                    href={pushed.result.branchUrl}
                                     target='_blank'
                                     rel='noreferrer'
                                     className='font-semibold text-blue-700 underline'
@@ -363,13 +450,32 @@ export function CodeModernizationPanel({e}: {e: Engagement}) {
                                     View branch
                                 </a>
                             )}
-                            {pushed.commitUrl && (
+                            {pushed.result.commitUrl && (
                                 <a
-                                    href={pushed.commitUrl}
+                                    href={pushed.result.commitUrl}
                                     target='_blank'
                                     rel='noreferrer'
                                     className='font-semibold text-blue-700 underline'
                                 >
+                                    View commit
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                )}
+                {pushed?.module === 'module2' && (
+                    <div className='mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900'>
+                        <div className='font-bold'>
+                            Pushed {pushed.result.fileCount} Module 2 files to {pushed.result.repo} on branch {pushed.result.newBranch} (from {pushed.result.parentBranch}).
+                        </div>
+                        <div className='mt-2 flex flex-wrap gap-3'>
+                            {pushed.result.branchUrl && (
+                                <a href={pushed.result.branchUrl} target='_blank' rel='noreferrer' className='font-semibold text-blue-700 underline'>
+                                    View branch
+                                </a>
+                            )}
+                            {pushed.result.commitUrl && (
+                                <a href={pushed.result.commitUrl} target='_blank' rel='noreferrer' className='font-semibold text-blue-700 underline'>
                                     View commit
                                 </a>
                             )}

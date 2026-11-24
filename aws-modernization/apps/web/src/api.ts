@@ -974,7 +974,12 @@ export const api = {
     ),
   codePushFiles: (id: string) =>
     fetch(`/api/engagements/${id}/code-push/files`).then((r) =>
-      parse<{ demo: boolean; project: string; files: { path: string; language: string; content: string }[] }>(r),
+      parse<{
+        demo: boolean;
+        project: string;
+        files: { path: string; language: string; content: string }[];
+        module1Branches: Record<string, { branch: string; commitSha: string; baseBranch?: string }>;
+      }>(r),
     ),
   codePush: (
     id: string,
@@ -999,8 +1004,45 @@ export const api = {
         fileCount: number;
         files: string[];
         initialisedEmptyRepo?: boolean;
+        commitSha?: string;
         commitUrl?: string;
         branchUrl?: string;
+      }>(r),
+    ),
+  codePushModule2: (
+    id: string,
+    payload: {
+      repo: string;
+      token?: string;
+      parentBranch?: string;
+      newBranch: string;
+      message?: string;
+      apply: boolean;
+      confirm: boolean;
+    },
+  ) =>
+    fetch(`/api/engagements/${id}/code-push/module2`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then((r) =>
+      parse<{
+        repo: string;
+        module: string;
+        parentBranch: string;
+        newBranch: string;
+        defaultBranch: string;
+        parentCommitSha?: string;
+        generatedFiles?: string[];
+        previewFiles?: { path: string; language: string; content: string }[];
+        fileCount: number;
+        inheritedFileCount: number;
+        totalExpectedFileCount: number;
+        dryRun: boolean;
+        created?: boolean;
+        branchUrl?: string;
+        commitUrl?: string;
+        message?: string;
       }>(r),
     ),
   githubPublish: (
@@ -1019,6 +1061,27 @@ export const api = {
         filesCommitted?: number;
         workflowUrl?: string;
         error?: string;
+      }>(r),
+    ),
+  githubPublishModule: (
+    id: string,
+    moduleId: string,
+    payload: { repoName: string; token?: string; org?: string; private?: boolean },
+  ) =>
+    fetch(`/api/engagements/${id}/github-publish/modules/${encodeURIComponent(moduleId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then((r) =>
+      parse<{
+        repository: string;
+        moduleId: string;
+        branch: string;
+        commitSha: string;
+        parentBranch: string;
+        parentCommitSha: string;
+        branchUrl: string;
+        filesCommitted: number;
       }>(r),
     ),
   goldenParity: (id: string) =>

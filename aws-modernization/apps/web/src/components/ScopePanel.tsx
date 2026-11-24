@@ -34,6 +34,11 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [redescribing, setRedescribing] = useState(false);
+  const [githubRepo, setGithubRepo] = useState(`modernized-${e.id.slice(0, 8)}`);
+  const [githubToken, setGithubToken] = useState("");
+  const [modulePublishing, setModulePublishing] = useState(false);
+  const [modulePublishError, setModulePublishError] = useState<string | null>(null);
+  const [modulePublishResult, setModulePublishResult] = useState<Awaited<ReturnType<typeof api.githubPublishModule>> | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -50,6 +55,8 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
   const selected = useMemo(() => data?.modules.find((m) => m.id === selectedId) ?? null, [data, selectedId]);
 
   async function pick(m: ScopeModule) {
+    setModulePublishError(null);
+    setModulePublishResult(null);
     if (saving || m.id === e.scope?.capabilityId) {
       setSelectedId(m.id);
       return;
@@ -75,6 +82,25 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
       setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       setRedescribing(false);
+    }
+  }
+
+  async function publishSelectedModule() {
+    if (!selected) return;
+    setModulePublishing(true);
+    setModulePublishError(null);
+    setModulePublishResult(null);
+    try {
+      setModulePublishResult(
+        await api.githubPublishModule(e.id, selected.id, {
+          repoName: githubRepo.trim(),
+          token: githubToken.trim() || undefined,
+        }),
+      );
+    } catch (err) {
+      setModulePublishError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setModulePublishing(false);
     }
   }
 
@@ -152,7 +178,57 @@ export function ScopePanel({ e, onChange }: { e: Engagement; onChange: (eng: Eng
         </section>
       )}
 
-      {selected && <ModuleDetail m={selected} sharedServices={e.scope?.capabilityId === selected.id ? e.scope.sharedServices : undefined} />}
+      {selected && (
+        <>
+          <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-bold text-slate-900">Generate and push this module</h3>
+            <p className="mt-1 text-xs text-slate-600">
+              Each successful module push creates a new branch from the latest modernization branch. The repository default branch is only used for the first push.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <label className="text-xs font-medium text-slate-700">
+                GitHub repository
+                <input
+                  value={githubRepo}
+                  onChange={(ev) => setGithubRepo(ev.target.value)}
+                  placeholder="owner/repository"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs focus:border-blue-500 focus:bg-white focus:outline-none"
+                />
+              </label>
+              <label className="text-xs font-medium text-slate-700">
+                GitHub token
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(ev) => setGithubToken(ev.target.value)}
+                  autoComplete="new-password"
+                  placeholder="Used for this request only"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs focus:border-blue-500 focus:bg-white focus:outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={modulePublishing || !githubRepo.trim()}
+                onClick={() => void publishSelectedModule()}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-50"
+              >
+                {modulePublishing ? "Generating and pushing…" : `Push ${selected.displayName ?? selected.name}`}
+              </button>
+            </div>
+            {modulePublishError && <p role="alert" className="mt-2 text-xs text-red-700">{modulePublishError}</p>}
+            {modulePublishResult && (
+              <p className="mt-2 text-xs text-emerald-800">
+                Pushed {modulePublishResult.filesCommitted} files to{" "}
+                <a className="font-semibold underline" href={modulePublishResult.branchUrl} target="_blank" rel="noreferrer">
+                  {modulePublishResult.branch}
+                </a>{" "}
+                from {modulePublishResult.parentBranch}.
+              </p>
+            )}
+          </section>
+          <ModuleDetail m={selected} sharedServices={e.scope?.capabilityId === selected.id ? e.scope.sharedServices : undefined} />
+        </>
+      )}
     </div>
   );
 }

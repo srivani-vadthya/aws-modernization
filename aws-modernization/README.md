@@ -39,6 +39,10 @@ Git and ZIP engagements are no longer labelled as GenApp insurance. The pipeline
 
 The core pipeline is platform-neutral. Language analyzers are optional plugins that emit a shared relationship contract; the existing IBM i plugin handles RPGLE/SQLRPGLE, CLLE, DDS display/physical files, and COBOL members. It extracts conservative `CALLS`, `READS`, `WRITES`, and `MAPS_TO` leads; it is not a replacement for a compiler-backed dependency analysis. Additional analyzers can be registered without changing intake, gates, artifact packs, or the UI contract.
 
+## Module-by-module GitHub publishing
+
+From the Scope screen, select a business module and use **Generate and push this module**. The first successful push creates a unique branch from the repository default branch. Each later push fetches the latest successful modernization commit, supplies its readable source and dependencies as generation context, and creates another unique branch from that commit. Generated files are confined to `modules/<module-id>/`, and each successful branch and commit SHA is stored with the engagement so the sequence continues across requests. The GitHub token is used only for the request and is not stored.
+
 ## Optional AWS S3 intake
 
 To stage a sanitized source ZIP from an engagement, configure the API with an IAM role, AWS profile, or the normal AWS SDK credential chain, plus:
@@ -61,5 +65,5 @@ The **Load sample** path intentionally retains its curated GenApp discovery pack
 Set in `apps/api/.env` (never commit secrets):
 
 - `ADO_ORG`, `ADO_PROJECT`, `ADO_PAT` — create work items on export
-- `GITHUB_TOKEN` — push generated code (later)
+- `GITHUB_TOKEN` — optional default token for module publishing
 - `AWS_REGION=us-east-1` — Transform/Bedrock wiring (later)

@@ -955,6 +955,13 @@ class GitHubPublishIn(BaseModel):
     referenceNumber: str | None = None
 
 
+class GitHubModulePublishIn(BaseModel):
+    repoName: str | None = None
+    token: str | None = None
+    org: str | None = None
+    private: bool = True
+
+
 @app.post("/api/engagements/{eid}/github-publish")
 def post_github_publish(eid: str, body: GitHubPublishIn):
     eng = store.load(eid)
@@ -1013,6 +1020,59 @@ def post_github_publish(eid: str, body: GitHubPublishIn):
         eng["githubDeployment"] = result
         store.save(eng)
     return result
+
+
+@app.post("/api/engagements/{eid}/github-publish/modules/{module_id}")
+def post_github_module_publish(eid: str, module_id: str, body: GitHubModulePublishIn):
+    """Generate one selected module from the latest pipeline branch and publish a new child branch."""
+    from . import github_deployer
+
+    with github_deployer.module_publish_lock:
+        eng = store.load(eid)
+        if not eng:
+            raise HTTPException(404, "Engagement not found")
+        try:
+            target = target_contract.validate_target_contract(
+                (eng.get("seed") or {}).get("target", {}),
+                require_approval=True,
+            )
+            modules = scope_modules.build_scope_modules(eng, use_llm=False)["modules"]
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+        module = next((item for item in modules if item.get("id") == module_id), None)
+        if not module:
+            raise HTTPException(404, f"Module '{module_id}' was not found in this engagement.")
+
+        repo_name = (
+            body.repoName
+            or os.getenv("FRONTEND_REPO")
+            or os.getenv("BACKEND_REPO")
+            or ""
+        ).strip().rstrip("/").removesuffix(".git")
+        pipeline_states = eng.get("githubModulePipelines") or {}
+        try:
+            result = github_deployer.publish_module_branch(
+                repo_name=repo_name,
+                module_id=module_id,
+                generate_files=lambda parent_files: bedrock_skills.synthesize_module_codebase(
+                    module,
+                    target,
+                    parent_files,
+                ),
+                token=body.token,
+                org=body.org,
+                private=body.private,
+                pipeline_states=pipeline_states,
+            )
+        except github_deployer.ModulePublishError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(502, f"Module generation failed: {exc}") from exc
+
+        eng.setdefault("githubModulePipelines", {})[result["repository"]] = result.pop("pipelineState")
+        store.save(eng)
+        return result
 
 
 class BatchIn(BaseModel):
@@ -1339,13 +1399,28 @@ class CodePushIn(BaseModel):
     confirm: bool = False
 
 
+class Module2CodePushIn(BaseModel):
+    repo: str = ""
+    token: str | None = None
+    parentBranch: str | None = None
+    newBranch: str
+    message: str = "Add InsuranceClaims API module"
+    apply: bool = False
+    confirm: bool = False
+
+
 @app.get("/api/engagements/{eid}/code-push/files")
 def get_code_push_files(eid: str):
     """The demo modernized project shown in the Code Modernization step."""
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
-    return {"demo": True, "project": code_push.project_name(eng), "files": code_push.listing(eng)}
+    return {
+        "demo": True,
+        "project": code_push.project_name(eng),
+        "files": code_push.listing(eng),
+        "module1Branches": eng.get("codePushModule1Branches") or {},
+    }
 
 
 @app.post("/api/engagements/{eid}/code-push")
@@ -1355,8 +1430,52 @@ def post_code_push(eid: str, body: CodePushIn):
     if not eng:
         raise HTTPException(404, "Engagement not found")
     try:
-        return code_push.push(eng, body.repo, body.token, body.branch, body.message, body.apply and body.confirm,
-                              body.base, body.overwrite)
+        result = code_push.push(
+            eng,
+            body.repo,
+            body.token,
+            body.branch,
+            body.message,
+            body.apply and body.confirm,
+            body.base,
+            body.overwrite,
+        )
+        if body.apply and body.confirm and result.get("commitSha"):
+            eng.setdefault("codePushModule1Branches", {})[body.repo.strip()] = {
+                "branch": result["branch"],
+                "commitSha": result["commitSha"],
+                "baseBranch": result.get("baseBranch"),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+            store.save(eng)
+        return result
+    except code_push.PushError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/engagements/{eid}/code-push/module2")
+def post_code_push_module2(eid: str, body: Module2CodePushIn):
+    """Generate InsuranceClaims.Api from a Module 1 branch and publish a new child branch."""
+    eng = store.load(eid)
+    if not eng:
+        raise HTTPException(404, "Engagement not found")
+    try:
+        repo_key = body.repo.strip()
+        module1_state = (eng.get("codePushModule1Branches") or {}).get(repo_key) or {}
+        parent_branch = body.parentBranch or module1_state.get("branch")
+        if not parent_branch:
+            raise HTTPException(
+                400,
+                f"No successful Module 1 push is recorded for '{repo_key}'. Push Module 1 first.",
+            )
+        return code_push.push_module2(
+            repo=body.repo,
+            parent_branch=parent_branch,
+            new_branch=body.newBranch,
+            token=body.token,
+            message=body.message,
+            apply=body.apply and body.confirm,
+        )
     except code_push.PushError as exc:
         raise HTTPException(400, str(exc)) from exc
 
