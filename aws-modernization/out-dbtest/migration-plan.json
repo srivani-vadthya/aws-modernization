@@ -1,0 +1,773 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-20T10:49:36.392025+00:00",
+  "sourceEngine": "unknown",
+  "targetEngine": "azure-postgresql",
+  "tableCount": 26,
+  "tables": [
+    {
+      "name": "IMS.ENTITIES.CLAIM",
+      "sourceName": "IMS.ENTITIES.CLAIM",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Claim",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "claim",
+      "evidence": "seed.tables:IMS.Entities.Claim"
+    },
+    {
+      "name": "IMS.ENTITIES.CLAIMSTATUS",
+      "sourceName": "IMS.ENTITIES.CLAIMSTATUS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.ClaimStatus",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "claim",
+      "evidence": "seed.tables:IMS.Entities.ClaimStatus"
+    },
+    {
+      "name": "IMS.ENTITIES.CLAIMATTACHMENT",
+      "sourceName": "IMS.ENTITIES.CLAIMATTACHMENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.ClaimAttachment",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "claim",
+      "evidence": "seed.tables:IMS.Entities.ClaimAttachment"
+    },
+    {
+      "name": "IMS.ENTITIES.CLIENT",
+      "sourceName": "IMS.ENTITIES.CLIENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Client",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "client",
+      "evidence": "seed.tables:IMS.Entities.Client"
+    },
+    {
+      "name": "IMS.ENTITIES.OFFER",
+      "sourceName": "IMS.ENTITIES.OFFER",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Offer",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "client",
+      "evidence": "seed.tables:IMS.Entities.Offer"
+    },
+    {
+      "name": "IMS.ENTITIES.OFFERSTATUS",
+      "sourceName": "IMS.ENTITIES.OFFERSTATUS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.OfferStatus",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "client",
+      "evidence": "seed.tables:IMS.Entities.OfferStatus"
+    },
+    {
+      "name": "IMS.ENTITIES.DIRECTORY",
+      "sourceName": "IMS.ENTITIES.DIRECTORY",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Directory",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "directory",
+      "evidence": "seed.tables:IMS.Entities.Directory"
+    },
+    {
+      "name": "IMS.ENTITIES.FORM",
+      "sourceName": "IMS.ENTITIES.FORM",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Form",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "form",
+      "evidence": "seed.tables:IMS.Entities.Form"
+    },
+    {
+      "name": "IMS.ENTITIES.DOCUMENTTYPE",
+      "sourceName": "IMS.ENTITIES.DOCUMENTTYPE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.DocumentType",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "form",
+      "evidence": "seed.tables:IMS.Entities.DocumentType"
+    },
+    {
+      "name": "IMS.ENTITIES.INVOICE",
+      "sourceName": "IMS.ENTITIES.INVOICE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Invoice",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "invoice",
+      "evidence": "seed.tables:IMS.Entities.Invoice"
+    },
+    {
+      "name": "IMS.ENTITIES.INVOICESTATUS",
+      "sourceName": "IMS.ENTITIES.INVOICESTATUS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.InvoiceStatus",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "invoice",
+      "evidence": "seed.tables:IMS.Entities.InvoiceStatus"
+    },
+    {
+      "name": "IMS.ENTITIES.PARTICULAR",
+      "sourceName": "IMS.ENTITIES.PARTICULAR",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Particular",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "invoice",
+      "evidence": "seed.tables:IMS.Entities.Particular"
+    },
+    {
+      "name": "IMS.ENTITIES.PARTICULARTYPE",
+      "sourceName": "IMS.ENTITIES.PARTICULARTYPE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.ParticularType",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "invoice",
+      "evidence": "seed.tables:IMS.Entities.ParticularType"
+    },
+    {
+      "name": "IMS.ENTITIES.ACTIVITYLOG",
+      "sourceName": "IMS.ENTITIES.ACTIVITYLOG",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.ActivityLog",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "activitylog",
+      "evidence": "seed.tables:IMS.Entities.ActivityLog"
+    },
+    {
+      "name": "IMS.ENTITIES.POLICY",
+      "sourceName": "IMS.ENTITIES.POLICY",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Policy",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policy",
+      "evidence": "seed.tables:IMS.Entities.Policy"
+    },
+    {
+      "name": "IMS.ENTITIES.INSURANCEPROVIDER",
+      "sourceName": "IMS.ENTITIES.INSURANCEPROVIDER",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.InsuranceProvider",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "insuranceprovider",
+      "evidence": "seed.tables:IMS.Entities.InsuranceProvider"
+    },
+    {
+      "name": "IMS.ENTITIES.POLICYTYPE",
+      "sourceName": "IMS.ENTITIES.POLICYTYPE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.PolicyType",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policytype",
+      "evidence": "seed.tables:IMS.Entities.PolicyType"
+    },
+    {
+      "name": "IMS.ENTITIES.AGENT",
+      "sourceName": "IMS.ENTITIES.AGENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Agent",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "agent",
+      "evidence": "seed.tables:IMS.Entities.Agent"
+    },
+    {
+      "name": "IMS.ENTITIES.POLICYSTATUS",
+      "sourceName": "IMS.ENTITIES.POLICYSTATUS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.PolicyStatus",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policy",
+      "evidence": "seed.tables:IMS.Entities.PolicyStatus"
+    },
+    {
+      "name": "IMS.ENTITIES.POLICYATTACHMENT",
+      "sourceName": "IMS.ENTITIES.POLICYATTACHMENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.PolicyAttachment",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policy",
+      "evidence": "seed.tables:IMS.Entities.PolicyAttachment"
+    },
+    {
+      "name": "IMS.ENTITIES.RISK",
+      "sourceName": "IMS.ENTITIES.RISK",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Risk",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policy",
+      "evidence": "seed.tables:IMS.Entities.Risk"
+    },
+    {
+      "name": "IMS.ENTITIES.ENDORSEMENT",
+      "sourceName": "IMS.ENTITIES.ENDORSEMENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Endorsement",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "policy",
+      "evidence": "seed.tables:IMS.Entities.Endorsement"
+    },
+    {
+      "name": "IMS.ENTITIES.DEFAULTREBATE",
+      "sourceName": "IMS.ENTITIES.DEFAULTREBATE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.DefaultRebate",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "defaultrebate",
+      "evidence": "seed.tables:IMS.Entities.DefaultRebate"
+    },
+    {
+      "name": "IMS.ENTITIES.SOA",
+      "sourceName": "IMS.ENTITIES.SOA",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.Soa",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "soa",
+      "evidence": "seed.tables:IMS.Entities.Soa"
+    },
+    {
+      "name": "IMS.ENTITIES.SOASTATUS",
+      "sourceName": "IMS.ENTITIES.SOASTATUS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.Entities.SoaStatus",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "soa",
+      "evidence": "seed.tables:IMS.Entities.SoaStatus"
+    },
+    {
+      "name": "IMS.WEBMVC.MODELS.APPLICATIONUSER",
+      "sourceName": "IMS.WEBMVC.MODELS.APPLICATIONUSER",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:IMS.WebMvc.Models.ApplicationUser",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "identity",
+      "evidence": "seed.tables:IMS.WebMvc.Models.ApplicationUser"
+    }
+  ],
+  "risks": [
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.CLAIM.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.CLAIM",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.CLAIMSTATUS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.CLAIMSTATUS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.CLAIMATTACHMENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.CLAIMATTACHMENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.CLIENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.CLIENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.OFFER.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.OFFER",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.OFFERSTATUS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.OFFERSTATUS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.DIRECTORY.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.DIRECTORY",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.FORM.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.FORM",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.DOCUMENTTYPE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.DOCUMENTTYPE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.INVOICE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.INVOICE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.INVOICESTATUS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.INVOICESTATUS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.PARTICULAR.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.PARTICULAR",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.PARTICULARTYPE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.PARTICULARTYPE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.ACTIVITYLOG.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.ACTIVITYLOG",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.POLICY.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.POLICY",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.INSURANCEPROVIDER.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.INSURANCEPROVIDER",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.POLICYTYPE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.POLICYTYPE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.AGENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.AGENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.POLICYSTATUS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.POLICYSTATUS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.POLICYATTACHMENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.POLICYATTACHMENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.RISK.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.RISK",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.ENDORSEMENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.ENDORSEMENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.DEFAULTREBATE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.DEFAULTREBATE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.SOA.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.SOA",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.ENTITIES.SOASTATUS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.ENTITIES.SOASTATUS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: IMS.WEBMVC.MODELS.APPLICATIONUSER.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "IMS.WEBMVC.MODELS.APPLICATIONUSER",
+      "column": "ID"
+    }
+  ],
+  "migrationTool": "Flyway or Liquibase for schema + custom ETL for data",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Schema Preparation",
+      "description": "Review generated DDL, resolve HIGH/CRITICAL risk columns, add missing PKs.",
+      "tool": "Manual review + db_migration_model.py validate",
+      "risk": "low",
+      "steps": [
+        "Run: python migration_plan.py engagement.json --target azure-postgresql",
+        "Review schema.sql for HIGH/CRITICAL risk columns",
+        "Add surrogate PKs to tables flagged with no primary key",
+        "Confirm NUMERIC precision with business stakeholders for packed decimal fields"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Target Schema Deployment",
+      "description": "Deploy schema.sql to the azure-postgresql instance.",
+      "tool": "psql or Flyway",
+      "risk": "low",
+      "steps": [
+        "Create target database on azure-postgresql",
+        "Run: psql -h <host> -U <user> -d <db> -f schema.sql",
+        "Verify all tables created: SELECT tablename FROM pg_tables WHERE schemaname='public'"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Data Migration",
+      "description": "Migrate data from unknown to azure-postgresql using the recommended tool.",
+      "tool": "Flyway or Liquibase for schema + custom ETL for data",
+      "risk": "high",
+      "steps": [
+        "Configure Flyway or Liquibase for schema + custom ETL for data",
+        "Run initial full-load migration",
+        "Validate row counts per table",
+        "Run parity checks on HIGH-risk columns (packed decimal, date fields)"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "ORM & Application Cutover",
+      "description": "Update application ORM configuration to point to the new database.",
+      "tool": "orm-config/ generated files",
+      "risk": "medium",
+      "steps": [
+        "Replace existing ORM provider with generated orm-config/ files",
+        "Update connection string in appsettings.json / application.yml / database.py",
+        "Run application integration tests against the new database",
+        "Enable CDC dual-write for shared kernel tables"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Cutover & Validation",
+      "description": "Switch production traffic to the new database. Validate parity.",
+      "tool": "Bidirectional CDC Guardrail skill + differential-golden-run-comparator skill",
+      "risk": "critical",
+      "steps": [
+        "Enable bidirectional CDC for zero-downtime cutover",
+        "Run differential-golden-run-comparator skill for parity validation",
+        "Shift 10% traffic canary to new database",
+        "Monitor for 24h, then shift 100%",
+        "Decommission source database after 30-day observation period"
+      ]
+    }
+  ],
+  "detection": {
+    "sourceEngine": "unknown",
+    "sourceConfidence": "low",
+    "sourceEvidence": [],
+    "targetEngine": "azure-postgresql",
+    "allSourceVotes": {}
+  },
+  "ormFiles": [
+    "ModernDbContext.cs",
+    "Entities.cs",
+    "connection-string.snippet.json",
+    "Program.snippet.cs"
+  ],
+  "ddlFile": "out-dbtest/schema.sql",
+  "validation": {
+    "errors": [],
+    "warnings": []
+  }
+}

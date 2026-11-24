@@ -1,0 +1,539 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-11-20T10:51:39.456660+00:00",
+  "sourceEngine": "unknown",
+  "targetEngine": "azure-postgresql",
+  "tableCount": 17,
+  "tables": [
+    {
+      "name": "CUSTOMER",
+      "sourceName": "CUSTOMER",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:CUSTOMER",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "customer",
+      "evidence": "seed.tables:CUSTOMER"
+    },
+    {
+      "name": "POLICY",
+      "sourceName": "POLICY",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:POLICY",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "motor",
+      "evidence": "seed.tables:POLICY"
+    },
+    {
+      "name": "MOTOR",
+      "sourceName": "MOTOR",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:MOTOR",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "motor",
+      "evidence": "seed.tables:MOTOR"
+    },
+    {
+      "name": "HOUSE",
+      "sourceName": "HOUSE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:HOUSE",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "home",
+      "evidence": "seed.tables:HOUSE"
+    },
+    {
+      "name": "KSDSCUST",
+      "sourceName": "KSDSCUST",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:KSDSCUST",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "customer",
+      "evidence": "seed.tables:KSDSCUST"
+    },
+    {
+      "name": "KSDSPOLY",
+      "sourceName": "KSDSPOLY",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "seed.tables:KSDSPOLY",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "motor",
+      "evidence": "seed.tables:KSDSPOLY"
+    },
+    {
+      "name": "LGPOLICY",
+      "sourceName": "LGPOLICY",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgacdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from READS in base/src/lgacdb01.cbl"
+    },
+    {
+      "name": "CUSTOMER_SECURE",
+      "sourceName": "CUSTOMER_SECURE",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgacdb02.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgacdb02.cbl"
+    },
+    {
+      "name": "LGCMAREA",
+      "sourceName": "LGCMAREA",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgacus01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from READS in base/src/lgacus01.cbl"
+    },
+    {
+      "name": "EIBCALEN",
+      "sourceName": "EIBCALEN",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgapdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from READS in base/src/lgapdb01.cbl"
+    },
+    {
+      "name": "ENDOWMENT",
+      "sourceName": "ENDOWMENT",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgapdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgapdb01.cbl"
+    },
+    {
+      "name": "COMMERCIAL",
+      "sourceName": "COMMERCIAL",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgapdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgapdb01.cbl"
+    },
+    {
+      "name": "WS",
+      "sourceName": "WS",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgicvs01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from READS in base/src/lgicvs01.cbl"
+    },
+    {
+      "name": "SSMAP",
+      "sourceName": "SSMAP",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgtestc1.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from READS in base/src/lgtestc1.cbl"
+    },
+    {
+      "name": "CUST",
+      "sourceName": "CUST",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgucdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgucdb01.cbl"
+    },
+    {
+      "name": "OF",
+      "sourceName": "OF",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgupdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgupdb01.cbl"
+    },
+    {
+      "name": "ENDOW",
+      "sourceName": "ENDOW",
+      "columns": [
+        {
+          "name": "ID",
+          "sourceType": "UNKNOWN",
+          "primaryKey": true,
+          "nullable": false,
+          "evidence": "base/src/lgupdb01.cbl",
+          "targetType": "TEXT",
+          "risk": "high",
+          "conversionNote": "Unknown source type; defaulted to TEXT \u2014 review manually"
+        }
+      ],
+      "capability": "",
+      "evidence": "inferred from WRITES in base/src/lgupdb01.cbl"
+    }
+  ],
+  "risks": [
+    {
+      "title": "High-risk type conversion: CUSTOMER.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "CUSTOMER",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: POLICY.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "POLICY",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: MOTOR.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "MOTOR",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: HOUSE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "HOUSE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: KSDSCUST.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "KSDSCUST",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: KSDSPOLY.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "KSDSPOLY",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: LGPOLICY.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "LGPOLICY",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: CUSTOMER_SECURE.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "CUSTOMER_SECURE",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: LGCMAREA.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "LGCMAREA",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: EIBCALEN.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "EIBCALEN",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: ENDOWMENT.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ENDOWMENT",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: COMMERCIAL.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "COMMERCIAL",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: WS.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "WS",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: SSMAP.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "SSMAP",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: CUST.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "CUST",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: OF.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "OF",
+      "column": "ID"
+    },
+    {
+      "title": "High-risk type conversion: ENDOW.ID",
+      "severity": "high",
+      "description": "UNKNOWN -> TEXT: Unknown source type; defaulted to TEXT \u2014 review manually",
+      "remediation": "Validate data values before migration. Run parity checks post-migration.",
+      "table": "ENDOW",
+      "column": "ID"
+    }
+  ],
+  "migrationTool": "Flyway or Liquibase for schema + custom ETL for data",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Schema Preparation",
+      "description": "Review generated DDL, resolve HIGH/CRITICAL risk columns, add missing PKs.",
+      "tool": "Manual review + db_migration_model.py validate",
+      "risk": "low",
+      "steps": [
+        "Run: python migration_plan.py engagement.json --target azure-postgresql",
+        "Review schema.sql for HIGH/CRITICAL risk columns",
+        "Add surrogate PKs to tables flagged with no primary key",
+        "Confirm NUMERIC precision with business stakeholders for packed decimal fields"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Target Schema Deployment",
+      "description": "Deploy schema.sql to the azure-postgresql instance.",
+      "tool": "psql or Flyway",
+      "risk": "low",
+      "steps": [
+        "Create target database on azure-postgresql",
+        "Run: psql -h <host> -U <user> -d <db> -f schema.sql",
+        "Verify all tables created: SELECT tablename FROM pg_tables WHERE schemaname='public'"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Data Migration",
+      "description": "Migrate data from unknown to azure-postgresql using the recommended tool.",
+      "tool": "Flyway or Liquibase for schema + custom ETL for data",
+      "risk": "high",
+      "steps": [
+        "Configure Flyway or Liquibase for schema + custom ETL for data",
+        "Run initial full-load migration",
+        "Validate row counts per table",
+        "Run parity checks on HIGH-risk columns (packed decimal, date fields)"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "ORM & Application Cutover",
+      "description": "Update application ORM configuration to point to the new database.",
+      "tool": "orm-config/ generated files",
+      "risk": "medium",
+      "steps": [
+        "Replace existing ORM provider with generated orm-config/ files",
+        "Update connection string in appsettings.json / application.yml / database.py",
+        "Run application integration tests against the new database",
+        "Enable CDC dual-write for shared kernel tables"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Cutover & Validation",
+      "description": "Switch production traffic to the new database. Validate parity.",
+      "tool": "Bidirectional CDC Guardrail skill + differential-golden-run-comparator skill",
+      "risk": "critical",
+      "steps": [
+        "Enable bidirectional CDC for zero-downtime cutover",
+        "Run differential-golden-run-comparator skill for parity validation",
+        "Shift 10% traffic canary to new database",
+        "Monitor for 24h, then shift 100%",
+        "Decommission source database after 30-day observation period"
+      ]
+    }
+  ],
+  "detection": {
+    "sourceEngine": "unknown",
+    "sourceConfidence": "low",
+    "sourceEvidence": [],
+    "targetEngine": "azure-postgresql",
+    "allSourceVotes": {}
+  },
+  "ormFiles": [
+    "ModernDbContext.cs",
+    "Entities.cs",
+    "connection-string.snippet.json",
+    "Program.snippet.cs"
+  ],
+  "ddlFile": "out-dbtest/genapp-before/schema.sql",
+  "validation": {
+    "errors": [],
+    "warnings": []
+  }
+}

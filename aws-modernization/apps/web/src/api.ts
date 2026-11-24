@@ -1271,6 +1271,8 @@ export const api = {
     }).then((r) => parse<TestScenariosResponse>(r)),
   testScenariosExportUrl: (id: string, format: "zip" | "md") => `/api/engagements/${id}/test-scenarios/export?format=${format}`,
   packUrl: (id: string) => `/api/engagements/${id}/pack`,
+  generateDocsDocx: (id: string) => `/api/engagements/${id}/generate-docs/docx`,
+  generateDocsHtml: (id: string) => `/api/engagements/${id}/generate-docs/html`,
 };
 
 

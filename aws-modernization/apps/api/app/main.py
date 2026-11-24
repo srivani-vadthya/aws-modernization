@@ -13,8 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import ado, aws_intake, bedrock_skills, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, store, target_contract
-from . import ado, aws_intake, bedrock_skills, code_push, ingest, knowledge_graph, pack, playwright_gen, scope_modules, sir_generator, store, test_scenarios, user_stories
+from . import ado, aws_intake, bedrock_skills, code_push, hitl_orchestrator, human_actions, ingest, knowledge_graph, migration_runs, pack, playwright_gen, scope_modules, sir_generator, store, target_contract, test_scenarios, user_stories
 from .phases import PHASE_IDS, PHASES
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,8 @@ load_dotenv()
 app = FastAPI(title="Nexus Modernize", version="0.1.0")
 from .discovery_routes import router as discovery_router
 app.include_router(discovery_router)
+from .doc_generator_routes import router as doc_generator_router
+app.include_router(doc_generator_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -507,16 +508,14 @@ def submit_orchestrator_feedback(eid: str, body: FeedbackIn):
     eng = store.load(eid)
     if not eng:
         raise HTTPException(404, "Engagement not found")
-    
-    result = bedrock_skills.orchestrate_feedback(eng, body.comment, body.currentPhase)
+
+    result = hitl_orchestrator.run(eng, body.comment, body.currentPhase)
+
+    if not result["ok"]:
+        raise HTTPException(422, result.get("error", "HITL orchestration failed"))
+
     store.save(result["engagement"])
-    return {
-        "ok": True,
-        "targetPhase": result["targetPhase"],
-        "reasoning": result["reasoning"],
-        "actionTaken": result["actionTaken"],
-        "engagement": result["engagement"],
-    }
+    return result
 
 
 @app.post("/api/engagements/{eid}/gates/{phase}")

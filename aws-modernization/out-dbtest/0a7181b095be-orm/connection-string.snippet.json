@@ -1,0 +1,7 @@
+// appsettings.json — connection string for azure-postgresql
+// Replace <host>, <db>, <user>, <password> with your actual values.
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=<host>.postgres.database.azure.com;Database=<db>;Username=<user>;Password=<password>;SslMode=Require;"
+  }
+}
