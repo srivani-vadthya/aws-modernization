@@ -24,6 +24,21 @@ load_dotenv()
 app = FastAPI(title="Nexus Modernize", version="0.1.0")
 from .discovery_routes import router as discovery_router
 app.include_router(discovery_router)
+from .module_context.routes import router as module_context_router
+app.include_router(module_context_router)
+from .modernization_engine.routes import router as modernization_engine_router
+app.include_router(modernization_engine_router)
+
+
+@app.on_event("startup")
+def mark_interrupted_modernization_workers() -> None:
+    """BackgroundTasks are process-local, so they are never silently resumed after restart."""
+    from .modernization_engine import service as modernization_service
+    for engagement in store.list_all():
+        try:
+            modernization_service.interrupt_orphaned_executions(engagement["id"])
+        except Exception:
+            logger.warning("Could not reconcile modernization execution after startup", exc_info=True)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -370,8 +385,13 @@ class TargetIn(BaseModel):
     runtime: str | None = None
     runtimeVersion: str | None = None
     architectureStyle: str | None = None
+    apiApproach: str | None = None
     serviceDecomposition: str | None = None
     frontendRequirement: str | None = None
+    dataAccessTechnology: str | None = None
+    orm: str | None = None
+    migrationStrategy: str | None = None
+    integrationRequirements: str | None = None
     deploymentCloud: str | None = None
     deploymentRegion: str | None = None
     deploymentEnvironment: str | None = None
@@ -599,6 +619,10 @@ def decide_gate(eid: str, phase: str, body: GateIn):
             nxt = "semantic-ir"
         elif phase == "semantic-ir":
             nxt = "user-stories"
+        elif phase == "modernize":
+            # Code Modernization is an execution workspace, not a second engagement
+            # sign-off gate.  Keep the existing MODERNIZE approval as its entry point.
+            nxt = "code modernization"
         elif idx + 1 < len(PHASE_IDS):
             nxt = PHASE_IDS[idx + 1]
         else:
@@ -606,7 +630,10 @@ def decide_gate(eid: str, phase: str, body: GateIn):
 
         if nxt:
             eng["currentPhase"] = nxt
-            eng["gates"][nxt]["status"] = "ready"
+            # Code Modernization is intentionally a workspace rather than a
+            # separate gate, so it has no gate record to mutate.
+            if nxt in eng["gates"]:
+                eng["gates"][nxt]["status"] = "ready"
             eng["status"] = nxt
 
             # Dynamic gate-triggered progression

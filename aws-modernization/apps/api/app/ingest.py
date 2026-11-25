@@ -11,7 +11,6 @@ from pathlib import Path
 
 from . import store
 from .classifier import classify_tree
-from .generated import write_generated
 from .phases import PHASE_IDS
 from .seed import genapp_seed, generic_seed
 
@@ -102,18 +101,8 @@ def _finalize(eng: dict, source: Path, overlay_seed: bool) -> dict:
         eng["seed"] = generic_seed(inventory, eng["id"], eng["name"])
         eng["domain"] = "unclassified"
         build_dotnet_graph(eng, source)
-    # Modernized target service artifacts are written into the artifacts folder
-    target_info = (eng.get("seed") or {}).get("target") or {}
-    lang = (target_info.get("language") or "").lower()
-    stack = (target_info.get("stack") or "").lower()
-    if any("c#" in s or ".net" in s for s in (lang, stack)):
-        from .generated_dotnet import write_dotnet_generated, write_frontend_generated
-        gen_dir = store.engagement_dir(eng["id"]) / "artifacts" / "ims-modernized-service"
-        write_dotnet_generated(gen_dir)
-        write_frontend_generated()
-    elif overlay_seed:
-        gen_dir = store.engagement_dir(eng["id"]) / "artifacts" / "motor-policy-service"
-        write_generated(gen_dir)
+    # Intake only captures and analyzes the legacy repository. Modernized output is created
+    # later, in an approval-gated execution workspace, never beside intake artifacts.
     # Intake is an internal processing step; Discovery is the first human gate.
     eng["gates"]["intake"].update(status="completed", decision=None,
         actor="source-ingestion", at=_now(),

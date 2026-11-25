@@ -1,65 +1,126 @@
-# Nexus Modernize
+# VModernize
 
-Customer-demo portal for an AWS-centered modernization offering. AWS Transform is the conversion engine; this product is the control plane: intake, discovery, knowledge graph, business-module scope, requirements, backlog (Azure DevOps), cloud-native reimagine, tests, failure analysis, and a hand-off pack.
+VModernize is a local modernization control plane. It takes a legacy repository
+through intake, discovery, scope selection, semantic analysis, requirements and
+user stories, target architecture, Module Context Package creation, and an
+approval-controlled modernization execution.
 
-Default demo domain: **insurance** (IBM CICS GenApp). Region: `us-east-1`. No login in v1.
+The product does **not** modify the cloned legacy repository. Provider work runs
+in an isolated engagement workspace; generated output is stored under the API
+data directory.
 
-## Run locally
+## Quick start
 
-Terminal 1 — API:
+### Prerequisites
+
+- Git
+- Python 3.11–3.13
+- Node.js 20 or later and npm
+- PowerShell on Windows
+
+For actual AWS Transform .NET modernization, also install:
+
+- AWS Transform CLI (`atx`) and authenticate it with an authorized AWS profile
+- .NET SDK 10 or later for the Transform worker (the generated target can still
+  be .NET 8)
+
+### 1. Clone and enter the repository
 
 ```powershell
-cd C:\Surya\aws-modernization\apps\api
+git clone https://github.com/<your-org>/aws-modernization.git
+cd aws-modernization
+```
+
+The following commands assume this directory contains `apps/api` and `apps/web`.
+
+### 2. Configure the backend
+
+```powershell
+cd apps/api
+Copy-Item .env.example .env
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
 ```
 
-Terminal 2 — UI:
+Open `.env` and configure only the integrations you intend to use. Never commit
+this file. See [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) for every variable.
+
+### 3. Start the API
+
+From `apps/api` with the virtual environment activated:
 
 ```powershell
-cd C:\Surya\aws-modernization\apps\web
-npm install
+python dev_server.py
+```
+
+The API starts at `http://127.0.0.1:8000`. This launcher watches only
+`apps/api/app`, so package generation and execution artifacts do not restart the
+backend on Windows.
+
+### 4. Start the web application
+
+Open a second PowerShell window:
+
+```powershell
+cd <repository-root>\apps\web
+npm ci
 npm run dev
 ```
 
-Open http://localhost:5173
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`).
 
-## Demo path
+## Normal workflow
 
-1. **Load sample: GenApp insurance** (clones https://github.com/cicsdev/cics-genapp) for the curated demo, or paste a Git URL / upload a zip for reusable source-derived analysis.
-2. Approve each phase gate (inventory → discovery → graph → Motor policy scope → SRS → backlog → architecture/code → tests → residuals).
-3. Export wave-1 stories to Azure DevOps (configured PAT) or download the JSON payload.
-4. Download the artifact pack. The curated GenApp demo also includes a generated Spring Boot skeleton.
+1. Enter a legacy Git URL through the UI and create an engagement.
+2. Review and approve the existing Discovery, Scope, Semantic IR, Requirements,
+   and User Story stages.
+3. Select and approve the target architecture.
+4. Open **Code Modernization**, authorize the execution session, prepare the
+   package/plan, and select **Start Modernization**.
+5. Keep the API and web terminals running until the execution reaches a final
+   status. Do not restart the API during provider execution.
+6. Inspect generated artifacts in the Code Modernization screen or under the
+   execution output directory described below.
 
-## Reusable analysis
+## Generated output and safety
 
-Git and ZIP engagements are no longer labelled as GenApp insurance. The pipeline inventories their assets, groups likely modules from their source-tree paths and file types, and generates a traceable baseline graph, requirements, backlog, test plan, and residual risks. These outputs are explicitly heuristic: validate module boundaries, dependencies, and business rules with source-language analysis and an SME before implementation.
+For an engagement ID `<engagement-id>` and execution ID `<execution-id>`, data is
+stored locally at:
 
-The core pipeline is platform-neutral. Language analyzers are optional plugins that emit a shared relationship contract; the existing IBM i plugin handles RPGLE/SQLRPGLE, CLLE, DDS display/physical files, and COBOL members. It extracts conservative `CALLS`, `READS`, `WRITES`, and `MAPS_TO` leads; it is not a replacement for a compiler-backed dependency analysis. Additional analyzers can be registered without changing intake, gates, artifact packs, or the UI contract.
-
-## Optional AWS S3 intake
-
-To stage a sanitized source ZIP from an engagement, configure the API with an IAM role, AWS profile, or the normal AWS SDK credential chain, plus:
-
-```dotenv
-AWS_REGION=us-east-1
-AWS_S3_INTAKE_BUCKET=your-private-intake-bucket
-AWS_S3_INTAKE_PREFIX=nexus-modernize/intake
-# Optional: AWS_PROFILE=your-named-profile
-# Optional: AWS_S3_SSE=aws:kms
-# Optional with aws:kms: AWS_S3_KMS_KEY_ID=alias/your-key
+```text
+apps/api/data/engagements/<engagement-id>/artifacts/modernization-executions/<execution-id>/
 ```
 
-The identity needs `s3:PutObject` for the configured prefix, and `kms:Encrypt` when using a customer-managed KMS key. Staging is generic: an environment-specific Transform or other analysis connector is selected after intake, rather than being hard-coded to one source platform.
+- `legacy-source/` — isolated working copy used by AWS Transform; never your
+  original clone.
+- `output/` — collected generated source and documentation after a provider task
+  completes.
+- `execution.json` — execution status, events, task history, and generated
+  artifact metadata.
 
-The **Load sample** path intentionally retains its curated GenApp discovery package and generated motor-policy skeleton for customer demonstrations.
+Do not treat staging content as final output until its task completes and the
+execution records validation results.
 
-## Optional integrations
+## Verification
 
-Set in `apps/api/.env` (never commit secrets):
+Backend tests:
 
-- `ADO_ORG`, `ADO_PROJECT`, `ADO_PAT` — create work items on export
-- `GITHUB_TOKEN` — push generated code (later)
-- `AWS_REGION=us-east-1` — Transform/Bedrock wiring (later)
+```powershell
+cd apps/api
+.\.venv\Scripts\python.exe -m pytest tests -q
+```
+
+Frontend production build:
+
+```powershell
+cd apps/web
+npm run build
+```
+
+## Documentation
+
+- [Local installation, configuration, execution, and troubleshooting](docs/LOCAL_SETUP.md)
+- [Modernization implementation guide](docs/MODERNIZATION_IMPLEMENTATION.md)
+- [Module Context Package](docs/module-context-package.md)
+- [Modernization Engine design history](docs/modernization-engine.md)

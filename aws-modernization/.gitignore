@@ -44,6 +44,7 @@ env/
 
 # Testing & Coverage
 .pytest_cache/
+.pytest-*/
 .coverage
 htmlcov/
 .tox/

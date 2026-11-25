@@ -10,7 +10,16 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      "/api": "http://127.0.0.1:8000",
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        configure: (proxy) => {
+          const token = process.env.EXECUTION_AUTH_TOKEN;
+          // This development-server-only bridge keeps the operator token out of
+          // React code, browser storage, and network requests issued by the browser.
+          if (token) proxy.on("proxyReq", (request) => request.setHeader("Authorization", `Bearer ${token}`));
+        },
+      },
     },
   },
 });

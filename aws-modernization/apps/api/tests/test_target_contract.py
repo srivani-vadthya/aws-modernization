@@ -24,6 +24,20 @@ def test_target_contract_rejects_java_csharp_mismatch():
         pass
 
 
+def test_target_contract_preserves_structured_architecture_and_data_choices():
+    target = validate_target_contract({
+        "language": "csharp", "framework": "aspnetcore", "frameworkVersion": "8",
+        "runtime": "dotnet", "runtimeVersion": "8", "architecture": "clean-architecture",
+        "apiApproach": "controllers", "frontendRequirement": "react", "data": "sql server",
+        "dataAccessTechnology": "Entity Framework Core", "orm": "EF Core",
+        "migrationStrategy": "versioned migrations", "integrationRequirements": "OIDC and event contracts",
+        "approved": True, "approvedBy": "reviewer",
+    })
+    assert target["apiApproach"] == "controllers"
+    assert target["dataAccessTechnology"] == "Entity Framework Core"
+    assert target["orm"] == "EF Core"
+    assert target["migrationStrategy"] == "versioned migrations"
+    assert target["integrationRequirements"] == "OIDC and event contracts"
 def test_target_codegen_respects_dotnet10_contract():
     files = synthesize_target_codebase({"name": "Claims"}, {
         "language": "csharp",

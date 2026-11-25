@@ -102,6 +102,7 @@ class LLMGateway:
         max_tokens: int,
         temperature: float,
         images_base64: list[dict[str, str]] | None = None,
+        allow_iam_fallback: bool = True,
     ) -> str | None:
         """Invoke Amazon Bedrock via Direct API Key Bearer Token or Boto3 SDK."""
         # 1. Direct HTTP API Key Bearer Token
@@ -125,10 +126,11 @@ class LLMGateway:
                                 }
                             })
                     payload = {
+                        "schemaVersion": "messages-v1",
                         "system": [{"text": system_prompt}],
                         "messages": [{"role": "user", "content": user_content}],
                         "inferenceConfig": {
-                            "max_new_tokens": max_tokens,
+                            "maxTokens": max_tokens,
                             "temperature": temperature,
                         },
                     }
@@ -165,9 +167,12 @@ class LLMGateway:
                         if content and "text" in content[0]:
                             return content[0]["text"]
                     else:
-                        logger.warning(f"Bedrock HTTP {resp.status_code} for {model_id}: {resp.text[:200]}")
+                        logger.warning("Bedrock HTTP failure status=%s model=%s", resp.status_code, model_id)
             except Exception as exc:
                 logger.warning(f"Bedrock HTTP invocation error: {exc}")
+
+        if not allow_iam_fallback:
+            return None
 
         # 2. Boto3 SDK IAM Fallback
         try:
@@ -175,9 +180,10 @@ class LLMGateway:
             client = boto3.client("bedrock-runtime", region_name=self.region)
             if "nova" in model_id.lower():
                 body = json.dumps({
+                    "schemaVersion": "messages-v1",
                     "system": [{"text": system_prompt}],
                     "messages": [{"role": "user", "content": [{"text": user_prompt}]}],
-                    "inferenceConfig": {"max_new_tokens": max_tokens, "temperature": temperature},
+                    "inferenceConfig": {"maxTokens": max_tokens, "temperature": temperature},
                 })
             else:
                 body = json.dumps({
@@ -248,7 +254,7 @@ class LLMGateway:
                         if "text" in data and data["text"]:
                             return data["text"]
                     else:
-                        logger.warning(f"Azure Responses API HTTP {resp.status_code}: {resp.text[:200]}")
+                        logger.warning("Azure/OpenAI Responses API HTTP failure status=%s", resp.status_code)
             except Exception as exc:
                 logger.warning(f"Azure Responses API call failed: {exc}")
 

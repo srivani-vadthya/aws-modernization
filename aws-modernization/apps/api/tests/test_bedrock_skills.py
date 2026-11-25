@@ -114,6 +114,29 @@ def test_llm_gateway_multi_tier_routing():
     assert gateway.get_model_for_task("vision") == "amazon.nova-pro-v1:0"
 
 
+def test_nova_bearer_payload_uses_documented_invoke_schema(monkeypatch):
+    import app.llm_gateway as gateway_module
+    captured = {}
+    class Response:
+        status_code = 200
+        def json(self): return {"output": {"message": {"content": [{"text": "ok"}]}}}
+    class Client:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, headers, json):
+            captured.update(url=url, headers=headers, payload=json)
+            return Response()
+    monkeypatch.setattr(gateway_module.httpx, "Client", Client)
+    gateway = gateway_module.LLMGateway()
+    gateway.bedrock_api_key = "test-only-secret"
+    assert gateway._invoke_bedrock("amazon.nova-pro-v1:0", "system", "prompt", 7, 0.2) == "ok"
+    assert captured["headers"]["Authorization"] == "Bearer test-only-secret"
+    assert captured["payload"]["schemaVersion"] == "messages-v1"
+    assert captured["payload"]["inferenceConfig"]["maxTokens"] == 7
+    assert "max_new_tokens" not in captured["payload"]["inferenceConfig"]
+
+
 def test_decouple_shared_kernels():
     """Verify Phase 2 skill generates Anti-Corruption Layer OpenAPI specs for shared tables."""
     from app.bedrock_skills import decouple_shared_kernels

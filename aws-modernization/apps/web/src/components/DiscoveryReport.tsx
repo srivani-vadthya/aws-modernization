@@ -1,4 +1,4 @@
-import {ReactNode, type, useEffect, useState} from 'react';
+import {ReactNode, useEffect, useState} from 'react';
 
 import {AppliedKnowledgeGraph} from './AppliedKnowledgeGraph';
 

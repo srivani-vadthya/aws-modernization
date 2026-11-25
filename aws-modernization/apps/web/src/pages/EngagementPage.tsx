@@ -397,8 +397,9 @@ export function EngagementPage() {
                     />
                 </div>
 
-                {/* HITL Sign-off Gate Bar with Orchestrator Feedback Loop */}
-                <GateBar
+                {/* Code Modernization is entered by the approved MODERNIZE gate; it has
+                    its own explicit Start authorization, rather than another gate. */}
+                {phase !== 'code modernization' && <GateBar
                     engagement={eng}
                     phase={phase}
                     extraHint={
@@ -450,7 +451,7 @@ export function EngagementPage() {
                                   }
                               }
                     }
-                />
+                />}
             </main>
         </div>
     );

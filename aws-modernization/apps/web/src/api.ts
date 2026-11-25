@@ -829,6 +829,8 @@ export type PhaseMeta = { id: string; label: string; group: string };
 
 async function parse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401) throw new Error("Execution access requires an authenticated server-managed session. Sign in through the configured application identity provider.");
+    if (res.status === 403) throw new Error("You do not have permission for this execution action.");
     let detail = res.statusText;
     try {
       const body = await res.json();
@@ -916,12 +918,19 @@ export const api = {
     fetch(`/api/engagements/${id}/bedrock/generate`, { method: "POST" }).then((r) =>
       parse<{ ok: boolean; srs: string; c4: string; playwrightFiles: string[] }>(r),
     ),
-  setTarget: (id: string, target: { language: string; framework: string; data: string; architecture: string }) =>
+  setTarget: (id: string, target: {
+    language: string; framework: string; data: string; architecture: string;
+    languageVersion?: string; frameworkVersion?: string; runtime?: string; runtimeVersion?: string;
+    architectureStyle?: string; apiApproach?: string; serviceDecomposition?: string; frontendRequirement?: string;
+    dataAccessTechnology?: string; orm?: string; migrationStrategy?: string; integrationRequirements?: string;
+    deploymentCloud?: string; deploymentRegion?: string; deploymentEnvironment?: string;
+    approved?: boolean; approvedBy?: string; approvedAt?: string; targetVersion?: string;
+  }) =>
     fetch(`/api/engagements/${id}/target`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(target),
-    }).then((r) => parse<Engagement>(r)),
+    }).then((r) => parse<{ok: boolean; target: Record<string, unknown>}>(r)),
   clarifications: (id: string, phase: string, answers: Record<string, string>) =>
     fetch(`/api/engagements/${id}/clarifications/${phase}`, {
       method: "POST",
@@ -1177,6 +1186,71 @@ export const api = {
     }).then((r) => parse<TestScenariosResponse>(r)),
   testScenariosExportUrl: (id: string, format: "zip" | "md") => `/api/engagements/${id}/test-scenarios/export?format=${format}`,
   packUrl: (id: string) => `/api/engagements/${id}/pack`,
+};
+
+export const moduleContextApi = {
+  templates: (id: string) => fetch(`/api/module-context-templates?eid=${encodeURIComponent(id)}`).then(r => parse<{templates: import('./types/moduleContext').ContextTemplate[]; recommendedIds: string[]}>(r)),
+  list: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/module-context-packages?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{packages: import('./types/moduleContext').ContextPackage[]}>(r)),
+  generate: (id: string, moduleId: string, templateIds: string[]) => fetch(`/api/engagements/${id}/module-context-packages`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moduleId, templateIds}),
+  }).then(r => parse<{created: boolean; manifest: import('./types/moduleContext').ContextPackage}>(r)),
+  freshness: (id: string, packageId: string) => fetch(`/api/engagements/${id}/module-context-packages/${packageId}/freshness`)
+    .then(r => parse<{status: string; reason: string}>(r)),
+  integrity: (id: string, packageId: string) => fetch(`/api/engagements/${id}/module-context-packages/${packageId}/integrity`)
+    .then(r => parse<{valid: boolean; artifactCount: number; internalReferences: string; templateHashes: string}>(r)),
+  downloadUrl: (id: string, packageId: string) => `/api/engagements/${id}/module-context-packages/${packageId}/download`,
+};
+
+export const modernizationEngineApi = {
+  authorizeExecution: (token: string) => fetch('/api/modernization-engine/session', {method: 'POST', headers: {'Authorization': `Bearer ${token}`}, credentials: 'same-origin'})
+    .then(r => parse<{authorized: boolean}>(r)),
+  prepare: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/modernization-engine/prepare`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moduleId})})
+    .then(r => parse<{package: import('./types/moduleContext').ContextPackage; readiness: import('./types/modernizationEngine').EnginePreview; run: import('./types/modernizationEngine').ModernizationRun; plan: import('./types/modernizationEngine').ModernizationPlan; orchestration: import('./types/modernizationEngine').OrchestrationRecord}>(r)),
+  preview: (id: string, moduleId: string, packageId: string) => fetch(`/api/engagements/${id}/modernization-engine/packages/${packageId}/readiness?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{preview: import('./types/modernizationEngine').EnginePreview}>(r)),
+  createRun: (id: string, moduleId: string, packageId: string) => fetch(`/api/engagements/${id}/modernization-engine/runs`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moduleId, packageId}),
+  }).then(r => parse<{run: import('./types/modernizationEngine').ModernizationRun}>(r)),
+  listRuns: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/modernization-engine/runs?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{runs: import('./types/modernizationEngine').ModernizationRun[]}>(r)),
+  planningPreview: (id: string, moduleId: string, packageId: string) => fetch(`/api/engagements/${id}/modernization-engine/packages/${packageId}/planning-preview?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{plan: import('./types/modernizationEngine').ModernizationPlan}>(r)),
+  createPlan: (id: string, moduleId: string, packageId: string) => fetch(`/api/engagements/${id}/modernization-engine/plans`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({moduleId, packageId}),
+  }).then(r => parse<{plan: import('./types/modernizationEngine').ModernizationPlan}>(r)),
+  listPlans: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/modernization-engine/plans?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{plans: import('./types/modernizationEngine').ModernizationPlan[]}>(r)),
+  approvePlan: (id: string, planId: string) => fetch(`/api/engagements/${id}/modernization-engine/plans/${planId}/approve`, {method: 'POST'})
+    .then(r => parse<{plan: import('./types/modernizationEngine').ModernizationPlan}>(r)),
+  agents: () => fetch('/api/modernization-engine/agents').then(r => parse<{agents: import('./types/modernizationEngine').ModernizationAgent[]}>(r)),
+  orchestrationPreview: (id: string, planId: string) => fetch(`/api/engagements/${id}/modernization-engine/plans/${planId}/orchestration-preview`)
+    .then(r => parse<{orchestration: import('./types/modernizationEngine').OrchestrationRecord}>(r)),
+  createOrchestration: (id: string, planId: string) => fetch(`/api/engagements/${id}/modernization-engine/orchestrations`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({planId}),
+  }).then(r => parse<{orchestration: import('./types/modernizationEngine').OrchestrationRecord}>(r)),
+  listOrchestrations: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/modernization-engine/orchestrations?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{orchestrations: import('./types/modernizationEngine').OrchestrationRecord[]}>(r)),
+  approveOrchestration: (id: string, orchestrationId: string) => fetch(`/api/engagements/${id}/modernization-engine/orchestrations/${orchestrationId}/approve`, {method: 'POST'})
+    .then(r => parse<{orchestration: import('./types/modernizationEngine').OrchestrationRecord}>(r)),
+  executionPreview: (id: string, orchestrationId: string) => fetch(`/api/engagements/${id}/modernization-engine/orchestrations/${orchestrationId}/execution-preview`)
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  createExecution: (id: string, orchestrationId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({orchestrationId})})
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  listExecutions: (id: string, moduleId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions?moduleId=${encodeURIComponent(moduleId)}`)
+    .then(r => parse<{executions: import('./types/modernizationEngine').ExecutionRecord[]}>(r)),
+  getExecution: (id: string, executionId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions/${executionId}`)
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  executionArtifacts: (id: string, executionId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions/${executionId}/artifacts`)
+    .then(r => parse<{artifacts: import('./types/modernizationEngine').GeneratedArtifact[]}>(r)),
+  executionAction: (id: string, executionId: string, action: 'queue' | 'pause' | 'resume' | 'cancel' | 'checkpoint' | 'retry', taskId?: string) => fetch(`/api/engagements/${id}/modernization-engine/executions/${executionId}/actions`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, taskId})})
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  startExecution: (id: string, executionId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions/${executionId}/start`, {method: 'POST'})
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  startModernization: (id: string, planId: string) => fetch(`/api/engagements/${id}/modernization-engine/start`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({planId})})
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
+  validateExecution: (id: string, executionId: string) => fetch(`/api/engagements/${id}/modernization-engine/executions/${executionId}/validate`, {method: 'POST'})
+    .then(r => parse<{execution: import('./types/modernizationEngine').ExecutionRecord}>(r)),
 };
 
 

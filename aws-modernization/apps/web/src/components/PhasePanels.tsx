@@ -8,6 +8,8 @@ import {ScopePanel} from './ScopePanel';
 import {SemanticIRPanel} from './SemanticIRPanel';
 import {TestScenariosPanel} from './TestScenariosPanel';
 import {UserStoriesPanel} from './UserStoriesPanel';
+import {ModernizationEnginePanel} from './ModernizationEnginePanel';
+import {TargetArchitecturePanel} from './TargetArchitecturePanel';
 
 export function PhasePanels({
     engagement,
@@ -39,7 +41,10 @@ export function PhasePanels({
         case 'user-stories':
             return <UserStoriesPanel e={engagement} onChange={onChange} />;
         case 'modernize':
-            return <Modernize e={engagement} onChange={onChange} />;
+            return <TargetArchitecturePanel engagement={engagement} onChange={onChange} />;
+        case 'code modernization':
+            return <ModernizationEnginePanel key={'engine:' + engagement.id + ':' + engagement.scope?.capabilityId}
+                engagementId={engagement.id} moduleId={engagement.scope?.capabilityId} />;
 
         case 'test-scenarios':
             return <TestScenariosPanel e={engagement} onChange={onChange} />;
@@ -121,13 +126,13 @@ function Modernize({
     async function handleSaveTarget() {
         setSaving(true);
         try {
-            const updated = await api.setTarget(e.id, {
+            await api.setTarget(e.id, {
                 language: lang,
                 framework,
                 data: database,
                 architecture: arch,
             });
-            onChange(updated);
+            onChange(await api.get(e.id));
             setSavedSuccess(true);
             setTimeout(() => setSavedSuccess(false), 3000);
         } catch (err) {
@@ -1241,6 +1246,10 @@ function SagaOrchestratorPanel({engagementId}: {engagementId: string}) {
         </section>
     );
 }
+
+// Retained only for compatibility with older saved component references.
+// TargetArchitecturePanel is the operational target configuration UI.
+void Modernize;
 
 function Tests({e}: {e: Engagement}) {
     const [playwrightData, setPlaywrightData] = useState<{
