@@ -28,6 +28,22 @@ print('Generated files:', list(csharp_repo.keys()))
 "
 ```
 
+## Template Selection Contract
+
+This parent skill supplies architecture context only; it is not a selectable golden
+bundle. Template selection must use the immutable bundles under `templates/` and
+record their individual file hashes and aggregate digest in the Module Context
+Package. The detailed `.NET 8` clean-architecture bundle is authoritative for an
+approved C# / ASP.NET Core 8 target. React instructions are selected only when the
+approved frontend target is React. Do not combine this parent skill's .NET 9 /
+minimal-API examples with the detailed .NET 8 controller-based bundle without an
+explicit compatibility decision.
+
+The consuming platform must persist the approved target configuration digest,
+selected bundle IDs and revisions, applicability, compatibility findings, and a
+snapshot of each selected `SKILL.md`. Missing target versions, undeclared React
+dependencies, and database-provider conflicts must never be silently inferred.
+
 ## Architectural Folder Structure (Clean Architecture Pattern)
 Regardless of language, the synthesizer adheres to strict **Ports & Adapters (Hexagonal)** separation:
 ```
