@@ -1,7 +1,7 @@
 import {ReactNode, type, useEffect, useState} from 'react';
 
 import {AppliedKnowledgeGraph} from './AppliedKnowledgeGraph';
-import {DocGenerator} from './DocGenerator';
+// import {DocGenerator} from './DocGenerator';
 
 type Evidence = {
     id: string;
@@ -302,7 +302,7 @@ export function DiscoveryReport({engagementId}: {engagementId: string}) {
 
     return (
         <div className='space-y-5'>
-            <DocGenerator engagementId={engagementId} />
+            {/* <DocGenerator engagementId={engagementId} /> */}
             <div
                 className='flex flex-wrap gap-1 border-b border-slate-200'
                 role='tablist'
